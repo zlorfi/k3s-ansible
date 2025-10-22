@@ -96,6 +96,20 @@
   run_once: true
   changed_when: false
 
+- name: Get ingress details
+  shell: |
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get ingress nginx-test -n default
+  register: ingress_status
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+
+- name: Get master node IP for ingress access
+  set_fact:
+    master_ip: "{{ hostvars[groups['master'][0]]['ansible_host'] }}"
+  delegate_to: localhost
+  run_once: true
+
 - name: Display deployment information
   debug:
     msg: |
@@ -112,14 +126,25 @@
       Service:
       {{ service_status.stdout }}
 
-      To access the service:
-      - export KUBECONFIG={{ playbook_dir }}/kubeconfig
-      - kubectl get svc nginx-test
+      Ingress:
+      {{ ingress_status.stdout }}
 
-      To scale the deployment:
-      - kubectl scale deployment nginx-test --replicas=10
+      ====================================
+      Access via Ingress:
+      ====================================
 
-      To delete the test deployment:
-      - kubectl delete -f {{ playbook_dir }}/manifests/nginx-test-deployment.yaml
+      1. Add to /etc/hosts:
+         {{ master_ip }}  nginx-test.local nginx.pi.local
+
+      2. Access via browser:
+         http://nginx-test.local
+         http://nginx.pi.local
+
+      3. Or test with curl:
+         curl -H "Host: nginx-test.local" http://{{ master_ip }}
+
+      Other commands:
+      - Scale: kubectl --kubeconfig={{ playbook_dir }}/kubeconfig scale deployment nginx-test --replicas=10
+      - Delete: kubectl --kubeconfig={{ playbook_dir }}/kubeconfig delete -f {{ playbook_dir }}/manifests/nginx-test-deployment.yaml
   delegate_to: localhost
   run_once: true

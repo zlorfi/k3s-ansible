@@ -167,13 +167,38 @@ kubectl get nodes
 kubectl get pods --all-namespaces
 ```
 
+## Ingress Setup
+
+K3s comes with **Traefik ingress controller** pre-installed by default, which allows you to expose your applications via HTTP/HTTPS with domain names.
+
+### How It Works
+
+- Traefik listens on ports **80 (HTTP)** and **443 (HTTPS)** on all nodes
+- Ingress rules route traffic based on hostname to different services
+- Multiple applications can share the same IP using different hostnames
+- No additional setup required - Traefik is ready to use after cluster deployment
+
+### Verify Traefik is Running
+
+```bash
+kubectl --kubeconfig=./kubeconfig get pods -n kube-system -l app.kubernetes.io/name=traefik
+kubectl --kubeconfig=./kubeconfig get svc -n kube-system traefik
+```
+
+### View Ingress Resources
+
+```bash
+kubectl --kubeconfig=./kubeconfig get ingress
+kubectl --kubeconfig=./kubeconfig describe ingress nginx-test
+```
+
 ## Testing the Cluster
 
-A sample nginx deployment with 5 replicas is provided to test your cluster.
+A sample nginx deployment with 5 replicas and ingress is provided to test your cluster.
 
 ### Automated Deployment (via Ansible)
 
-The test application is automatically deployed when you run the full playbook:
+The test application is automatically deployed with ingress when you run the full playbook:
 
 ```bash
 ansible-playbook site.yml
@@ -187,26 +212,33 @@ ansible-playbook site.yml --tags deploy-test
 
 The Ansible role will:
 - Wait for all nodes to be ready
-- Deploy the nginx application
+- Deploy the nginx application with ingress
 - Wait for all pods to be running
-- Show you the deployment status and pod distribution
+- Show deployment status, pod distribution, ingress details, and access instructions
 
 ### Manual Deployment (via kubectl)
 
-Alternatively, deploy manually using kubectl:
+Deploy using kubectl:
 
 ```bash
 export KUBECONFIG=$(pwd)/kubeconfig
 kubectl apply -f manifests/nginx-test-deployment.yaml
 ```
 
+This deploys:
+
+- Nginx deployment with 5 replicas
+- ClusterIP service
+- Ingress resource for domain-based access
+
 ### Verify the Deployment
 
 Check that all 5 replicas are running:
 
 ```bash
-kubectl get deployments
-kubectl get pods -o wide
+kubectl --kubeconfig=./kubeconfig get deployments
+kubectl --kubeconfig=./kubeconfig get pods -o wide
+kubectl --kubeconfig=./kubeconfig get ingress
 ```
 
 You should see output similar to:
@@ -223,24 +255,25 @@ nginx-test-7d8f4c9b6d-9k2ln   1/1     Running   0          1m    pi-worker-1
 nginx-test-7d8f4c9b6d-xr5wp   1/1     Running   0          1m    pi-worker-2
 ```
 
-### Access the Service
+### Access via Ingress
 
-K3s includes a built-in load balancer (Klipper). Get the external IP:
+Add your master node IP to /etc/hosts:
 
 ```bash
-kubectl get service nginx-test
+# Replace 192.168.1.100 with your master node IP
+192.168.1.100  nginx-test.local nginx.pi.local
 ```
 
-If you see an external IP assigned, you can access nginx:
+Then access via browser:
+
+- <http://nginx-test.local>
+- <http://nginx.pi.local>
+
+Or test with curl:
 
 ```bash
-curl http://<EXTERNAL-IP>
-```
-
-Or from any node in the cluster:
-
-```bash
-curl http://nginx-test.default.svc.cluster.local
+# Replace with your master node IP
+curl -H "Host: nginx-test.local" http://192.168.1.100
 ```
 
 ### Scale the Deployment
