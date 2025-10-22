@@ -266,6 +266,44 @@ When you're done testing:
 kubectl delete -f manifests/nginx-test-deployment.yaml
 ```
 
+## Maintenance
+
+### Rebooting Cluster Nodes
+
+A dedicated playbook is provided to safely reboot all cluster nodes:
+
+```bash
+ansible-playbook reboot.yml
+```
+
+This playbook will:
+
+1. Reboot worker nodes first (one at a time, serially)
+2. Wait for each worker to come back online and k3s-agent to be running
+3. Reboot master nodes (one at a time, serially)
+4. Wait for each master to come back online and k3s to be running
+5. Verify the cluster status and show all nodes are ready
+
+The serial approach ensures that only one node reboots at a time, maintaining cluster availability.
+
+### Reboot Only Workers
+
+```bash
+ansible-playbook reboot.yml --limit worker
+```
+
+### Reboot Only Masters
+
+```bash
+ansible-playbook reboot.yml --limit master
+```
+
+### Reboot a Specific Node
+
+```bash
+ansible-playbook reboot.yml --limit pi-worker-1
+```
+
 ## Troubleshooting
 
 ### Check k3s service status
