@@ -1,0 +1,36 @@
+---
+- name: Check if k3s agent is already installed
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+- name: Get master node token
+  set_fact:
+    k3s_url: "https://{{ hostvars[groups['master'][0]]['ansible_host'] }}:6443"
+    k3s_token: "{{ hostvars['k3s_token_holder']['token'] }}"
+
+- name: Download k3s installation script
+  get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    mode: '0755'
+  when: not k3s_binary.stat.exists
+
+- name: Install k3s agent
+  shell: |
+    INSTALL_K3S_VERSION="{{ k3s_version }}" \
+    K3S_URL="{{ k3s_url }}" \
+    K3S_TOKEN="{{ k3s_token }}" \
+    INSTALL_K3S_EXEC="agent {{ extra_agent_args }}" \
+    sh /tmp/k3s-install.sh
+  when: not k3s_binary.stat.exists
+
+- name: Wait for k3s agent to be ready
+  wait_for:
+    path: /var/lib/rancher/k3s/agent/kubelet.kubeconfig
+    state: present
+    timeout: 300
+
+- name: Display success message
+  debug:
+    msg: "K3s agent installed successfully and joined to cluster"

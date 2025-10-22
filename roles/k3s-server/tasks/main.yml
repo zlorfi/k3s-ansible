@@ -1,0 +1,78 @@
+---
+- name: Check if k3s is already installed
+  stat:
+    path: /usr/local/bin/k3s
+  register: k3s_binary
+
+- name: Download k3s installation script
+  get_url:
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    mode: '0755'
+  when: not k3s_binary.stat.exists
+
+- name: Install k3s server
+  shell: |
+    INSTALL_K3S_VERSION="{{ k3s_version }}" \
+    INSTALL_K3S_EXEC="server {{ extra_server_args }}" \
+    sh /tmp/k3s-install.sh
+  when: not k3s_binary.stat.exists
+
+- name: Wait for k3s to be ready
+  wait_for:
+    port: 6443
+    delay: 10
+    timeout: 300
+
+- name: Wait for node-token file to be created
+  wait_for:
+    path: /var/lib/rancher/k3s/server/node-token
+    state: present
+    timeout: 300
+
+- name: Read node token
+  slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: node_token
+
+- name: Store master node token
+  set_fact:
+    k3s_node_token: "{{ node_token.content | b64decode | trim }}"
+
+- name: Add node token to dummy host
+  add_host:
+    name: "k3s_token_holder"
+    token: "{{ k3s_node_token }}"
+
+- name: Create .kube directory for user
+  file:
+    path: "/home/{{ ansible_user }}/.kube"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0755'
+
+- name: Copy k3s kubeconfig to user home
+  copy:
+    src: /etc/rancher/k3s/k3s.yaml
+    dest: "/home/{{ ansible_user }}/.kube/config"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: '0600'
+    remote_src: yes
+
+- name: Replace localhost with master IP in kubeconfig
+  replace:
+    path: "/home/{{ ansible_user }}/.kube/config"
+    regexp: '127.0.0.1'
+    replace: "{{ ansible_host }}"
+
+- name: Fetch kubeconfig to local machine
+  fetch:
+    src: "/home/{{ ansible_user }}/.kube/config"
+    dest: "{{ playbook_dir }}/kubeconfig"
+    flat: yes
+
+- name: Display success message
+  debug:
+    msg: "K3s server installed successfully. Kubeconfig saved to {{ playbook_dir }}/kubeconfig"

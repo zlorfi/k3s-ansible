@@ -1,0 +1,67 @@
+---
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Upgrade all packages
+  apt:
+    upgrade: dist
+    autoremove: yes
+    autoclean: yes
+
+- name: Install required packages
+  apt:
+    name:
+      - curl
+      - wget
+      - git
+      - python3-pip
+      - iptables
+      - conntrack
+      - apparmor
+      - apparmor-utils
+    state: present
+
+- name: Enable cgroup memory and swap
+  lineinfile:
+    path: /boot/firmware/cmdline.txt
+    backrefs: yes
+    regexp: '^(.*rootwait.*)$'
+    line: '\1 cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory'
+  register: cmdline
+
+- name: Enable legacy iptables (required for k3s on Raspberry Pi)
+  alternatives:
+    name: iptables
+    path: /usr/sbin/iptables-legacy
+
+- name: Enable legacy ip6tables
+  alternatives:
+    name: ip6tables
+    path: /usr/sbin/ip6tables-legacy
+
+- name: Disable swap
+  command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+
+- name: Remove swap from /etc/fstab
+  lineinfile:
+    path: /etc/fstab
+    regexp: '^.*swap.*$'
+    state: absent
+
+- name: Reboot if cmdline was changed
+  reboot:
+    reboot_timeout: 300
+  when: cmdline.changed
+
+- name: Wait for system to become reachable
+  wait_for_connection:
+    delay: 30
+    timeout: 300
+  when: cmdline.changed

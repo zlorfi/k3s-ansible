@@ -1,0 +1,125 @@
+---
+- name: Wait for k3s to be fully ready
+  wait_for:
+    port: 6443
+    host: "{{ hostvars[groups['master'][0]]['ansible_host'] }}"
+    delay: 5
+    timeout: 300
+  delegate_to: localhost
+  run_once: true
+
+- name: Check if kubectl is available locally
+  command: which kubectl
+  register: kubectl_check
+  delegate_to: localhost
+  run_once: true
+  failed_when: false
+  changed_when: false
+
+- name: Install kubectl locally if not present
+  get_url:
+    url: "https://dl.k8s.io/release/{{ kubectl_version | default('v1.28.3') }}/bin/{{ ansible_system | lower }}/{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}/kubectl"
+    dest: /tmp/kubectl
+    mode: '0755'
+  delegate_to: localhost
+  run_once: true
+  when: kubectl_check.rc != 0
+
+- name: Set kubectl path
+  set_fact:
+    kubectl_bin: "{{ '/tmp/kubectl' if kubectl_check.rc != 0 else 'kubectl' }}"
+  delegate_to: localhost
+  run_once: true
+
+- name: Verify kubeconfig exists
+  stat:
+    path: "{{ playbook_dir }}/kubeconfig"
+  register: kubeconfig_file
+  delegate_to: localhost
+  run_once: true
+
+- name: Fail if kubeconfig not found
+  fail:
+    msg: "Kubeconfig not found at {{ playbook_dir }}/kubeconfig. Please run the k3s-server role first."
+  when: not kubeconfig_file.stat.exists
+  delegate_to: localhost
+  run_once: true
+
+- name: Wait for all nodes to be ready
+  shell: |
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get nodes --no-headers | grep -v Ready | wc -l
+  register: nodes_not_ready
+  until: nodes_not_ready.stdout | int == 0
+  retries: 30
+  delay: 10
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+
+- name: Deploy nginx test application
+  shell: |
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig apply -f {{ playbook_dir }}/manifests/nginx-test-deployment.yaml
+  register: deploy_result
+  delegate_to: localhost
+  run_once: true
+  changed_when: "'created' in deploy_result.stdout or 'configured' in deploy_result.stdout"
+
+- name: Wait for nginx deployment to be ready
+  shell: |
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig wait --for=condition=available --timeout=300s deployment/nginx-test -n default
+  register: deployment_ready
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+
+- name: Get deployment status
+  shell: |
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get deployment nginx-test -n default -o wide
+  register: deployment_status
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+
+- name: Get pods status
+  shell: |
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get pods -l app=nginx-test -n default -o wide
+  register: pods_status
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+
+- name: Get service details
+  shell: |
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get service nginx-test -n default
+  register: service_status
+  delegate_to: localhost
+  run_once: true
+  changed_when: false
+
+- name: Display deployment information
+  debug:
+    msg: |
+      ====================================
+      NGINX Test Deployment Successful!
+      ====================================
+
+      Deployment Status:
+      {{ deployment_status.stdout }}
+
+      Pods Status:
+      {{ pods_status.stdout }}
+
+      Service:
+      {{ service_status.stdout }}
+
+      To access the service:
+      - export KUBECONFIG={{ playbook_dir }}/kubeconfig
+      - kubectl get svc nginx-test
+
+      To scale the deployment:
+      - kubectl scale deployment nginx-test --replicas=10
+
+      To delete the test deployment:
+      - kubectl delete -f {{ playbook_dir }}/manifests/nginx-test-deployment.yaml
+  delegate_to: localhost
+  run_once: true

@@ -1,0 +1,343 @@
+# K3s Ansible Deployment for Raspberry Pi CM4/CM5
+
+Ansible playbook to deploy a k3s Kubernetes cluster on Raspberry Pi Compute Module 4 and 5 devices.
+
+## Prerequisites
+
+- Raspberry Pi CM4/CM5 modules running Raspberry Pi OS (64-bit recommended)
+- SSH access to all nodes
+- Ansible installed on your control machine
+- SSH key-based authentication configured
+
+## Project Structure
+
+```
+k3s-ansible/
+├── ansible.cfg                  # Ansible configuration
+├── site.yml                     # Main playbook
+├── inventory/
+│   └── hosts.ini               # Inventory file
+├── manifests/
+│   └── nginx-test-deployment.yaml  # Test nginx deployment
+└── roles/
+    ├── prereq/                 # Prerequisites role
+    │   └── tasks/
+    │       └── main.yml
+    ├── k3s-server/            # K3s master/server role
+    │   └── tasks/
+    │       └── main.yml
+    ├── k3s-agent/             # K3s worker/agent role
+    │   └── tasks/
+    │       └── main.yml
+    └── k3s-deploy-test/       # Test deployment role
+        └── tasks/
+            └── main.yml
+```
+
+## Configuration
+
+### 1. Update Inventory
+
+Edit `inventory/hosts.ini` and add your Raspberry Pi nodes:
+
+```ini
+[master]
+pi-master ansible_host=192.168.1.100 ansible_user=pi
+
+[worker]
+pi-worker-1 ansible_host=192.168.1.101 ansible_user=pi
+pi-worker-2 ansible_host=192.168.1.102 ansible_user=pi
+pi-worker-3 ansible_host=192.168.1.103 ansible_user=pi
+```
+
+### 2. Configure Variables
+
+In `inventory/hosts.ini`, you can customize:
+
+- `k3s_version`: K3s version to install (default: v1.28.3+k3s1)
+- `extra_server_args`: Additional arguments for k3s server
+- `extra_agent_args`: Additional arguments for k3s agent
+
+## Usage
+
+### Test Connectivity
+
+```bash
+ansible all -m ping
+```
+
+### Deploy K3s Cluster
+
+```bash
+ansible-playbook site.yml
+```
+
+This will deploy the full k3s cluster with the test nginx application.
+
+### Deploy Without Test Application
+
+To skip the test deployment:
+
+```bash
+ansible-playbook site.yml --skip-tags test
+```
+
+### Deploy Only the Test Application
+
+If the cluster is already running and you just want to deploy the test app:
+
+```bash
+ansible-playbook site.yml --tags deploy-test
+```
+
+### Deploy Only Prerequisites
+
+```bash
+ansible-playbook site.yml --tags prereq
+```
+
+## What the Playbook Does
+
+### Prerequisites Role (`prereq`)
+- Sets hostname on each node
+- Updates and upgrades system packages
+- Installs required packages (curl, wget, git, iptables, etc.)
+- Enables cgroup memory and swap in boot config
+- Configures legacy iptables (required for k3s on ARM)
+- Disables swap
+- Reboots if necessary
+
+### K3s Server Role (`k3s-server`)
+- Installs k3s in server mode on master node(s)
+- Configures k3s with Flannel VXLAN backend (optimized for ARM)
+- Retrieves and stores the node token for workers
+- Copies kubeconfig to master node user
+- Fetches kubeconfig to local machine for kubectl access
+
+### K3s Agent Role (`k3s-agent`)
+- Installs k3s in agent mode on worker nodes
+- Joins workers to the cluster using the master's token
+- Configures agents to connect to the master
+
+### K3s Deploy Test Role (`k3s-deploy-test`)
+- Waits for all cluster nodes to be ready
+- Deploys the nginx test application with 5 replicas
+- Verifies deployment is successful
+- Displays pod distribution across nodes
+
+## Post-Installation
+
+After successful deployment:
+
+1. The kubeconfig file will be saved to `./kubeconfig`
+2. Use it with kubectl:
+
+```bash
+export KUBECONFIG=$(pwd)/kubeconfig
+kubectl get nodes
+```
+
+You should see all your nodes in Ready state:
+
+```
+NAME          STATUS   ROLES                  AGE   VERSION
+pi-master     Ready    control-plane,master   5m    v1.28.3+k3s1
+pi-worker-1   Ready    <none>                 3m    v1.28.3+k3s1
+pi-worker-2   Ready    <none>                 3m    v1.28.3+k3s1
+```
+
+## Accessing the Cluster
+
+### From Master Node
+
+SSH into the master node and use kubectl:
+
+```bash
+ssh pi@pi-master
+kubectl get nodes
+```
+
+### From Your Local Machine
+
+Use the fetched kubeconfig:
+
+```bash
+export KUBECONFIG=/path/to/k3s-ansible/kubeconfig
+kubectl get nodes
+kubectl get pods --all-namespaces
+```
+
+## Testing the Cluster
+
+A sample nginx deployment with 5 replicas is provided to test your cluster.
+
+### Automated Deployment (via Ansible)
+
+The test application is automatically deployed when you run the full playbook:
+
+```bash
+ansible-playbook site.yml
+```
+
+Or deploy it separately after the cluster is up:
+
+```bash
+ansible-playbook site.yml --tags deploy-test
+```
+
+The Ansible role will:
+- Wait for all nodes to be ready
+- Deploy the nginx application
+- Wait for all pods to be running
+- Show you the deployment status and pod distribution
+
+### Manual Deployment (via kubectl)
+
+Alternatively, deploy manually using kubectl:
+
+```bash
+export KUBECONFIG=$(pwd)/kubeconfig
+kubectl apply -f manifests/nginx-test-deployment.yaml
+```
+
+### Verify the Deployment
+
+Check that all 5 replicas are running:
+
+```bash
+kubectl get deployments
+kubectl get pods -o wide
+```
+
+You should see output similar to:
+
+```
+NAME         READY   UP-TO-DATE   AVAILABLE   AGE
+nginx-test   5/5     5            5           1m
+
+NAME                          READY   STATUS    RESTARTS   AGE   NODE
+nginx-test-7d8f4c9b6d-2xk4p   1/1     Running   0          1m    pi-worker-1
+nginx-test-7d8f4c9b6d-4mz9r   1/1     Running   0          1m    pi-worker-2
+nginx-test-7d8f4c9b6d-7w3qs   1/1     Running   0          1m    pi-worker-3
+nginx-test-7d8f4c9b6d-9k2ln   1/1     Running   0          1m    pi-worker-1
+nginx-test-7d8f4c9b6d-xr5wp   1/1     Running   0          1m    pi-worker-2
+```
+
+### Access the Service
+
+K3s includes a built-in load balancer (Klipper). Get the external IP:
+
+```bash
+kubectl get service nginx-test
+```
+
+If you see an external IP assigned, you can access nginx:
+
+```bash
+curl http://<EXTERNAL-IP>
+```
+
+Or from any node in the cluster:
+
+```bash
+curl http://nginx-test.default.svc.cluster.local
+```
+
+### Scale the Deployment
+
+Test scaling:
+
+```bash
+# Scale up to 10 replicas
+kubectl scale deployment nginx-test --replicas=10
+
+# Scale down to 3 replicas
+kubectl scale deployment nginx-test --replicas=3
+
+# Watch the pods being created/terminated
+kubectl get pods -w
+```
+
+### Clean Up Test Deployment
+
+When you're done testing:
+
+```bash
+kubectl delete -f manifests/nginx-test-deployment.yaml
+```
+
+## Troubleshooting
+
+### Check k3s service status
+
+On master:
+```bash
+sudo systemctl status k3s
+sudo journalctl -u k3s -f
+```
+
+On workers:
+```bash
+sudo systemctl status k3s-agent
+sudo journalctl -u k3s-agent -f
+```
+
+### Reset a node
+
+If you need to reset a node and start over:
+
+```bash
+# On the node
+/usr/local/bin/k3s-uninstall.sh          # For server
+/usr/local/bin/k3s-agent-uninstall.sh    # For agent
+```
+
+### Common Issues
+
+1. **Nodes not joining**: Check firewall rules. K3s requires port 6443 open on the master.
+2. **Memory issues**: Ensure cgroup memory is enabled (the playbook handles this).
+3. **Network issues**: The playbook uses VXLAN backend which works better on ARM devices.
+
+## Customization
+
+### Add More Master Nodes (HA Setup)
+
+For a high-availability setup, you can add more master nodes:
+
+```ini
+[master]
+pi-master-1 ansible_host=192.168.1.100 ansible_user=pi
+pi-master-2 ansible_host=192.168.1.101 ansible_user=pi
+pi-master-3 ansible_host=192.168.1.102 ansible_user=pi
+```
+
+You'll need to configure an external database (etcd or PostgreSQL) for HA.
+
+### Custom K3s Arguments
+
+Modify `extra_server_args` or `extra_agent_args` in the inventory:
+
+```ini
+[k3s_cluster:vars]
+extra_server_args="--flannel-backend=vxlan --disable traefik --disable servicelb"
+extra_agent_args="--node-label foo=bar"
+```
+
+## Uninstall
+
+To completely remove k3s from all nodes:
+
+```bash
+# Create an uninstall playbook or run manually on each node
+ansible all -m shell -a "/usr/local/bin/k3s-uninstall.sh" --become
+ansible workers -m shell -a "/usr/local/bin/k3s-agent-uninstall.sh" --become
+```
+
+## License
+
+MIT
+
+## References
+
+- [K3s Documentation](https://docs.k3s.io/)
+- [K3s on Raspberry Pi](https://docs.k3s.io/installation/requirements)
