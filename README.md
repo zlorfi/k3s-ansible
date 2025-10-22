@@ -57,6 +57,30 @@ In `inventory/hosts.ini`, you can customize:
 - `k3s_version`: K3s version to install (default: v1.28.3+k3s1)
 - `extra_server_args`: Additional arguments for k3s server
 - `extra_agent_args`: Additional arguments for k3s agent
+- `extra_packages`: List of additional packages to install on all nodes
+
+### 3. Customize Extra Packages (Optional)
+
+The playbook can install additional system utilities on all nodes. Edit the `extra_packages` variable in `inventory/hosts.ini`:
+
+```ini
+# Comma-separated list of packages
+extra_packages=btop,vim,tmux,net-tools,dnsutils,iotop,ncdu,tree,jq
+```
+
+**Included packages:**
+
+- `btop` - Better top, modern system monitor
+- `vim` - Text editor
+- `tmux` - Terminal multiplexer
+- `net-tools` - Network tools (ifconfig, netstat, etc.)
+- `dnsutils` - DNS utilities (dig, nslookup)
+- `iotop` - I/O monitor
+- `ncdu` - Disk usage analyzer
+- `tree` - Directory tree viewer
+- `jq` - JSON processor
+
+To add packages, append them to the comma-separated list. To disable extra packages entirely, comment out or remove the `extra_packages` line.
 
 ## Usage
 
@@ -159,12 +183,48 @@ kubectl get nodes
 
 ### From Your Local Machine
 
-Use the fetched kubeconfig:
+The playbook automatically fetches the kubeconfig to `./kubeconfig`. You have several options to use it:
+
+#### Option 1: Temporary Access (Environment Variable)
 
 ```bash
-export KUBECONFIG=/path/to/k3s-ansible/kubeconfig
+export KUBECONFIG=$(pwd)/kubeconfig
 kubectl get nodes
 kubectl get pods --all-namespaces
+```
+
+#### Option 2: Merge into ~/.kube/config (Recommended)
+
+This allows you to manage multiple clusters and switch between them:
+
+```bash
+# Backup your existing config
+cp ~/.kube/config ~/.kube/config.backup
+
+# Merge the k3s config into your existing config
+KUBECONFIG=~/.kube/config:$(pwd)/kubeconfig kubectl config view --flatten > ~/.kube/config.tmp
+mv ~/.kube/config.tmp ~/.kube/config
+
+# Rename the context to something meaningful
+kubectl config rename-context default k3s-pi-cluster
+
+# View all contexts
+kubectl config get-contexts
+
+# Switch to k3s context
+kubectl config use-context k3s-pi-cluster
+
+# Switch back to other clusters
+kubectl config use-context <other-context-name>
+```
+
+#### Option 3: Direct Usage
+
+Use the kubeconfig file directly without setting environment variables:
+
+```bash
+kubectl --kubeconfig=./kubeconfig get nodes
+kubectl --kubeconfig=./kubeconfig get pods --all-namespaces
 ```
 
 ## Ingress Setup

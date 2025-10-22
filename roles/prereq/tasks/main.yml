@@ -27,6 +27,12 @@
       - apparmor-utils
     state: present
 
+- name: Install extra packages
+  apt:
+    name: "{{ extra_packages.split(',') }}"
+    state: present
+  when: extra_packages is defined and extra_packages | length > 0
+
 - name: Enable cgroup memory and swap
   lineinfile:
     path: /boot/firmware/cmdline.txt
