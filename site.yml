@@ -5,18 +5,29 @@
   become: yes
   roles:
     - role: prereq
+  tags:
+    - prereq
+    - prepare
 
 - name: Setup k3s server
   hosts: master
   become: yes
   roles:
     - role: k3s-server
+  tags:
+    - k3s-server
+    - server
+    - master
 
 - name: Setup k3s agents
   hosts: worker
   become: yes
   roles:
     - role: k3s-agent
+  tags:
+    - k3s-agent
+    - agent
+    - worker
 
 - name: Deploy test applications
   hosts: master

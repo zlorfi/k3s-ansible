@@ -18,7 +18,7 @@
 
 - name: Install kubectl locally if not present
   get_url:
-    url: "https://dl.k8s.io/release/{{ kubectl_version | default('v1.28.3') }}/bin/{{ ansible_system | lower }}/{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}/kubectl"
+    url: "https://dl.k8s.io/release/{{ k3s_version | regex_replace('\\+k3s.*$', '') }}/bin/{{ ansible_system | lower }}/{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}/kubectl"
     dest: /tmp/kubectl
     mode: '0755'
   delegate_to: localhost
@@ -113,38 +113,57 @@
 - name: Display deployment information
   debug:
     msg: |
-      ====================================
-      NGINX Test Deployment Successful!
-      ====================================
 
-      Deployment Status:
+      ========================================================================
+      ✓ NGINX Test Deployment Successful!
+      ========================================================================
+
+      📦 DEPLOYMENT STATUS:
       {{ deployment_status.stdout }}
 
-      Pods Status:
+      🔄 PODS STATUS:
       {{ pods_status.stdout }}
 
-      Service:
+      🌐 SERVICE:
       {{ service_status.stdout }}
 
-      Ingress:
+      🔀 INGRESS:
       {{ ingress_status.stdout }}
 
-      ====================================
-      Access via Ingress:
-      ====================================
+      ========================================================================
+      🚀 HOW TO ACCESS YOUR APPLICATION
+      ========================================================================
 
-      1. Add to /etc/hosts:
-         {{ master_ip }}  nginx-test.local nginx.pi.local
+      STEP 1: Add to your /etc/hosts file
+      ───────────────────────────────────────────────────────────────────────
+      {{ master_ip }}  nginx-test.local nginx.pi.local
 
-      2. Access via browser:
-         http://nginx-test.local
-         http://nginx.pi.local
+      STEP 2: Access in your browser
+      ───────────────────────────────────────────────────────────────────────
+      → http://nginx-test.local
+      → http://nginx.pi.local
 
-      3. Or test with curl:
-         curl -H "Host: nginx-test.local" http://{{ master_ip }}
+      STEP 3: Or test with curl
+      ───────────────────────────────────────────────────────────────────────
+      curl -H "Host: nginx-test.local" http://{{ master_ip }}
 
-      Other commands:
-      - Scale: kubectl --kubeconfig={{ playbook_dir }}/kubeconfig scale deployment nginx-test --replicas=10
-      - Delete: kubectl --kubeconfig={{ playbook_dir }}/kubeconfig delete -f {{ playbook_dir }}/manifests/nginx-test-deployment.yaml
+      ========================================================================
+      📝 USEFUL COMMANDS
+      ========================================================================
+
+      Scale deployment:
+        kubectl --kubeconfig={{ playbook_dir }}/kubeconfig scale deployment nginx-test --replicas=10
+
+      Delete deployment:
+        kubectl --kubeconfig={{ playbook_dir }}/kubeconfig delete -f {{ playbook_dir }}/manifests/nginx-test-deployment.yaml
+
+      View logs:
+        kubectl --kubeconfig={{ playbook_dir }}/kubeconfig logs -l app=nginx-test --tail=50
+
+      Watch pods:
+        kubectl --kubeconfig={{ playbook_dir }}/kubeconfig get pods -l app=nginx-test -w
+
+      ========================================================================
+
   delegate_to: localhost
   run_once: true

@@ -79,14 +79,14 @@
 
 - name: Verify cluster status
   hosts: master[0]
-  become: yes
+  become: no
   tasks:
     - name: Wait additional time for cluster to stabilize
       pause:
         seconds: 30
 
     - name: Check all nodes are ready
-      command: kubectl get nodes
+      command: kubectl --kubeconfig=/home/{{ ansible_user }}/.kube/config get nodes
       register: nodes_status
       changed_when: false
 
@@ -99,7 +99,7 @@
           {{ nodes_status.stdout }}
 
     - name: Check system pods
-      command: kubectl get pods -n kube-system
+      command: kubectl --kubeconfig=/home/{{ ansible_user }}/.kube/config get pods -n kube-system
       register: system_pods
       changed_when: false
 

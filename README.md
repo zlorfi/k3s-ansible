@@ -42,12 +42,12 @@ Edit `inventory/hosts.ini` and add your Raspberry Pi nodes:
 
 ```ini
 [master]
-pi-master ansible_host=192.168.1.100 ansible_user=pi
+pi-master ansible_host=192.168.30.100 ansible_user=pi
 
 [worker]
-pi-worker-1 ansible_host=192.168.1.101 ansible_user=pi
-pi-worker-2 ansible_host=192.168.1.102 ansible_user=pi
-pi-worker-3 ansible_host=192.168.1.103 ansible_user=pi
+pi-worker-1 ansible_host=192.168.30.102 ansible_user=pi
+pi-worker-2 ansible_host=192.168.30.103 ansible_user=pi
+pi-worker-3 ansible_host=192.168.30.104 ansible_user=pi
 ```
 
 ### 2. Configure Variables
@@ -260,8 +260,8 @@ nginx-test-7d8f4c9b6d-xr5wp   1/1     Running   0          1m    pi-worker-2
 Add your master node IP to /etc/hosts:
 
 ```bash
-# Replace 192.168.1.100 with your master node IP
-192.168.1.100  nginx-test.local nginx.pi.local
+# Replace 192.168.30.101 with your master node IP
+192.168.30.101  nginx-test.local nginx.pi.local
 ```
 
 Then access via browser:
@@ -273,7 +273,7 @@ Or test with curl:
 
 ```bash
 # Replace with your master node IP
-curl -H "Host: nginx-test.local" http://192.168.1.100
+curl -H "Host: nginx-test.local" http://192.168.30.101
 ```
 
 ### Scale the Deployment
@@ -377,9 +377,9 @@ For a high-availability setup, you can add more master nodes:
 
 ```ini
 [master]
-pi-master-1 ansible_host=192.168.1.100 ansible_user=pi
-pi-master-2 ansible_host=192.168.1.101 ansible_user=pi
-pi-master-3 ansible_host=192.168.1.102 ansible_user=pi
+pi-master-1 ansible_host=192.168.30.100 ansible_user=pi
+pi-master-2 ansible_host=192.168.30.101 ansible_user=pi
+pi-master-3 ansible_host=192.168.30.102 ansible_user=pi
 ```
 
 You'll need to configure an external database (etcd or PostgreSQL) for HA.
