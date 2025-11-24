@@ -454,6 +454,129 @@ extra_server_args="--flannel-backend=vxlan --disable traefik --disable servicelb
 extra_agent_args="--node-label foo=bar"
 ```
 
+## Compute Blade Agent Deployment
+
+The playbook includes automatic deployment of the Compute Blade Agent, a system service for managing Compute Blade hardware (Raspberry Pi CM4/CM5 modules). The agent monitors hardware states, reacts to temperature changes and button presses, and exposes metrics via Prometheus.
+
+### Components
+
+1. **compute-blade-agent**: Daemon that monitors hardware and manages blade operations
+2. **bladectl**: Command-line tool for local/remote interaction with the agent
+3. **fanunit.uf2**: Firmware for the fan unit microcontroller
+
+### Configuration
+
+The compute-blade-agent deployment is controlled by the `enable_compute_blade_agent` variable in `inventory/hosts.ini`:
+
+```ini
+# Enable/disable compute-blade-agent on all worker nodes
+enable_compute_blade_agent=true
+```
+
+To disable on specific nodes, add an override:
+
+```ini
+[worker]
+cb-02 ansible_host=192.168.30.102 ansible_user=pi enable_compute_blade_agent=false
+cb-03 ansible_host=192.168.30.103 ansible_user=pi
+cb-04 ansible_host=192.168.30.104 ansible_user=pi
+```
+
+### Deployment
+
+The compute-blade-agent is automatically deployed as part of the main playbook:
+
+```bash
+ansible-playbook site.yml
+```
+
+Or deploy only the compute-blade-agent on worker nodes:
+
+```bash
+ansible-playbook site.yml --tags compute-blade-agent
+```
+
+### Verification
+
+Check the agent status on a worker node:
+
+```bash
+# SSH into a worker node
+ssh pi@192.168.30.102
+
+# Check service status
+sudo systemctl status compute-blade-agent
+
+# View logs
+sudo journalctl -u compute-blade-agent -f
+
+# Check binary installation
+/usr/local/bin/compute-blade-agent --version
+```
+
+### Configuration Files
+
+The compute-blade-agent creates its configuration at:
+
+```yaml
+/etc/compute-blade-agent/config.yaml
+```
+
+Configuration can also be controlled via environment variables prefixed with `BLADE_`.
+
+### Metrics and Monitoring
+
+The compute-blade-agent exposes Prometheus metrics. To monitor the agents:
+
+1. **Optional Kubernetes resources** are available in `manifests/compute-blade-agent-daemonset.yaml`
+
+2. Deploy the optional monitoring resources (requires Prometheus):
+
+```bash
+kubectl apply -f manifests/compute-blade-agent-daemonset.yaml
+```
+
+### Features
+
+- **Hardware Monitoring**: Tracks temperature, fan speed, and button events
+- **Critical Mode**: Automatically enters maximum fan speed + red LED during overheating
+- **Identification**: Locate specific blades via LED blinking
+- **Metrics Export**: Prometheus-compatible metrics endpoint
+
+### Troubleshooting compute-blade-agent
+
+#### Service fails to start
+
+Check the installer output:
+
+```bash
+sudo journalctl -u compute-blade-agent -n 50
+```
+
+#### Agent not detecting hardware
+
+Verify the Compute Blade hardware is properly connected. The agent logs detailed information:
+
+```bash
+sudo journalctl -u compute-blade-agent -f
+```
+
+#### Re-run installation
+
+To reinstall compute-blade-agent:
+
+```bash
+# SSH into the node
+ssh pi@<node-ip>
+
+# Uninstall
+sudo /usr/local/bin/k3s-uninstall-compute-blade-agent.sh 2>/dev/null || echo "Not found, continuing"
+
+# Remove from Ansible to reinstall
+# Then re-run the playbook
+ansible-playbook site.yml --tags compute-blade-agent
+```
+
 ## Uninstall
 
 To completely remove k3s from all nodes:
@@ -462,6 +585,13 @@ To completely remove k3s from all nodes:
 # Create an uninstall playbook or run manually on each node
 ansible all -m shell -a "/usr/local/bin/k3s-uninstall.sh" --become
 ansible workers -m shell -a "/usr/local/bin/k3s-agent-uninstall.sh" --become
+```
+
+To uninstall compute-blade-agent:
+
+```bash
+# Uninstall from all worker nodes
+ansible worker -m shell -a "bash /usr/local/bin/k3s-uninstall-compute-blade-agent.sh" --become
 ```
 
 ## License

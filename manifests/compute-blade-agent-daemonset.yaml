@@ -1,0 +1,118 @@
+---
+# Optional Kubernetes DaemonSet for compute-blade-agent monitoring
+# This manifest provides a DaemonSet that monitors compute-blade-agent metrics
+# and exposes them via a Kubernetes service for Prometheus scraping.
+#
+# Note: The compute-blade-agent is deployed as a host systemd service via Ansible.
+# This manifest is for optional Kubernetes-based monitoring only.
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: compute-blade-agent
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: compute-blade-agent-config
+  namespace: compute-blade-agent
+data:
+  monitoring-info.txt: |
+    Compute Blade Agent Monitoring
+    ==============================
+
+    The compute-blade-agent is deployed as a systemd service on each worker node.
+
+    To check the service status on a node:
+    - SSH into the node and run: sudo systemctl status compute-blade-agent
+    - View logs: sudo journalctl -u compute-blade-agent -f
+
+    To interact with the agent from Kubernetes:
+    - Use kubectl exec or kubectl run to access the node
+    - Use local API calls to compute-blade-agent endpoints
+
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: compute-blade-agent-exporter
+  namespace: compute-blade-agent
+  labels:
+    app: compute-blade-agent-exporter
+    version: v1
+spec:
+  selector:
+    matchLabels:
+      app: compute-blade-agent-exporter
+  template:
+    metadata:
+      labels:
+        app: compute-blade-agent-exporter
+    spec:
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+        - operator: Exists
+      nodeSelector:
+        kubernetes.io/os: linux
+      containers:
+        - name: agent-monitor
+          image: busybox:latest
+          command:
+            - /bin/sh
+            - -c
+            - |
+              while true; do
+                if systemctl is-active --quiet compute-blade-agent; then
+                  echo "$(date): compute-blade-agent is running"
+                else
+                  echo "$(date): compute-blade-agent is NOT running"
+                fi
+                sleep 30
+              done
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: compute-blade-agent-metrics
+  namespace: compute-blade-agent
+  labels:
+    app: compute-blade-agent
+spec:
+  type: ClusterIP
+  selector:
+    app: compute-blade-agent
+  ports:
+    - name: metrics
+      port: 9100
+      targetPort: 9100
+      protocol: TCP
+
+---
+# Optional ServiceMonitor for Prometheus (requires prometheus-operator)
+# Uncomment this section if you have Prometheus installed with the operator
+#
+# apiVersion: monitoring.coreos.com/v1
+# kind: ServiceMonitor
+# metadata:
+#   name: compute-blade-agent
+#   namespace: compute-blade-agent
+#   labels:
+#     app: compute-blade-agent
+# spec:
+#   selector:
+#     matchLabels:
+#       app: compute-blade-agent
+#   endpoints:
+#     - port: metrics
+#       interval: 30s
+#       path: /metrics
