@@ -5,16 +5,19 @@ Quick reference for deploying and managing the Compute Blade Agent in your k3s-a
 ## Quick Start
 
 ### Deploy Everything
+
 ```bash
 ansible-playbook site.yml
 ```
 
 ### Deploy Only Compute Blade Agent
+
 ```bash
 ansible-playbook site.yml --tags compute-blade-agent
 ```
 
 ### Skip Compute Blade Agent
+
 ```bash
 ansible-playbook site.yml --skip-tags compute-blade-agent
 ```
@@ -24,6 +27,7 @@ ansible-playbook site.yml --skip-tags compute-blade-agent
 ### Enable/Disable Globally
 
 Edit `inventory/hosts.ini`:
+
 ```ini
 [k3s_cluster:vars]
 enable_compute_blade_agent=true    # Set to false to disable
@@ -32,6 +36,7 @@ enable_compute_blade_agent=true    # Set to false to disable
 ### Enable/Disable Per-Node
 
 Edit `inventory/hosts.ini`:
+
 ```ini
 [worker]
 cb-02 ansible_host=192.168.30.102 ansible_user=pi enable_compute_blade_agent=true
@@ -42,18 +47,21 @@ cb-04 ansible_host=192.168.30.104 ansible_user=pi
 ## Verification
 
 ### Check Service Status
+
 ```bash
 ssh pi@<worker-ip>
 sudo systemctl status compute-blade-agent
 ```
 
 ### View Logs
+
 ```bash
 ssh pi@<worker-ip>
 sudo journalctl -u compute-blade-agent -f
 ```
 
 ### Check Installation
+
 ```bash
 ssh pi@<worker-ip>
 /usr/local/bin/compute-blade-agent --version
@@ -70,6 +78,7 @@ ls -la /etc/compute-blade-agent/
 ## Environment Variables
 
 Configure via `BLADE_` prefixed environment variables:
+
 ```bash
 export BLADE_CONFIG_PATH=/etc/compute-blade-agent/config.yaml
 /usr/local/bin/compute-blade-agent
@@ -80,11 +89,13 @@ export BLADE_CONFIG_PATH=/etc/compute-blade-agent/config.yaml
 ### Optional Kubernetes Resources
 
 Deploy monitoring components:
+
 ```bash
 kubectl apply -f manifests/compute-blade-agent-daemonset.yaml
 ```
 
 This creates:
+
 - Namespace: `compute-blade-agent`
 - ConfigMap: `compute-blade-agent-config`
 - DaemonSet: `compute-blade-agent-exporter`
@@ -93,6 +104,7 @@ This creates:
 ### Prometheus Integration
 
 To enable Prometheus scraping, uncomment the ServiceMonitor in the manifest:
+
 ```yaml
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
@@ -112,6 +124,7 @@ spec:
 ## Troubleshooting
 
 ### Service Not Running
+
 ```bash
 # Check service status
 sudo systemctl status compute-blade-agent
@@ -124,11 +137,13 @@ sudo systemctl restart compute-blade-agent
 ```
 
 ### Hardware Not Detected
+
 1. Verify hardware is connected
 2. Check logs for hardware errors
 3. Ensure systemd service started correctly
 
 ### Reinstall
+
 ```bash
 # SSH to node
 ssh pi@<worker-ip>
@@ -146,12 +161,14 @@ ansible-playbook site.yml --tags compute-blade-agent
 ## Uninstall
 
 ### From Single Node
+
 ```bash
 ssh pi@<worker-ip>
 sudo bash /usr/local/bin/k3s-uninstall-compute-blade-agent.sh
 ```
 
 ### From All Worker Nodes
+
 ```bash
 ansible worker -m shell -a "bash /usr/local/bin/k3s-uninstall-compute-blade-agent.sh" --become
 ```

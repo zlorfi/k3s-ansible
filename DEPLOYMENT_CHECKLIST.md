@@ -10,10 +10,13 @@
 ## Deployment
 
 ### Option 1: Full Stack Deployment (Recommended for new clusters)
+
 ```bash
 ansible-playbook site.yml
 ```
+
 This will:
+
 1. Prepare all nodes (prerequisites)
 2. Install K3s server on master
 3. Install K3s agents on workers
@@ -25,6 +28,7 @@ This will:
 - [ ] Check for any errors in output
 
 ### Option 2: Skip Test Application
+
 ```bash
 ansible-playbook site.yml --skip-tags test
 ```
@@ -33,6 +37,7 @@ ansible-playbook site.yml --skip-tags test
 - [ ] Faster deployment, suitable if cluster already has applications
 
 ### Option 3: Deploy Only Compute Blade Agent
+
 ```bash
 ansible-playbook site.yml --tags compute-blade-agent
 ```
@@ -44,49 +49,60 @@ ansible-playbook site.yml --tags compute-blade-agent
 ## Post-Deployment Verification
 
 ### 1. Check Cluster Status
+
 ```bash
 export KUBECONFIG=$(pwd)/kubeconfig
 kubectl get nodes
 ```
+
 - [ ] All master and worker nodes should show "Ready"
 
 ### 2. Run Verification Script
+
 ```bash
 bash scripts/verify-compute-blade-agent.sh
 ```
+
 - [ ] All worker nodes pass connectivity check
 - [ ] Binary is installed at `/usr/local/bin/compute-blade-agent`
 - [ ] Service status shows "Running"
 - [ ] Config file exists at `/etc/compute-blade-agent/config.yaml`
 
 ### 3. Manual Verification on a Worker
+
 ```bash
 ssh pi@192.168.30.102
 sudo systemctl status compute-blade-agent
 ```
+
 - [ ] Service is active (running)
 - [ ] Service is enabled (will start on boot)
 
 ### 4. Check Logs
+
 ```bash
 ssh pi@192.168.30.102
 sudo journalctl -u compute-blade-agent -n 50
 ```
+
 - [ ] No error messages
 - [ ] Service started successfully
 - [ ] Hardware detection messages present (if applicable)
 
 ### 5. Verify Installation
+
 ```bash
 ssh pi@192.168.30.102
 /usr/local/bin/compute-blade-agent --version
 ```
+
 - [ ] Binary responds with version information
 - [ ] bladectl CLI tool is available
 
 ## Optional: Kubernetes Monitoring Setup
 
 ### Deploy Monitoring Resources
+
 ```bash
 kubectl apply -f manifests/compute-blade-agent-daemonset.yaml
 ```
@@ -96,6 +112,7 @@ kubectl apply -f manifests/compute-blade-agent-daemonset.yaml
 - [ ] Check service: `kubectl get service -n compute-blade-agent`
 
 ### Enable Prometheus Monitoring
+
 1. Edit `manifests/compute-blade-agent-daemonset.yaml`
 2. Uncomment the ServiceMonitor section
 3. Apply: `kubectl apply -f manifests/compute-blade-agent-daemonset.yaml`
@@ -106,18 +123,21 @@ kubectl apply -f manifests/compute-blade-agent-daemonset.yaml
 ## Troubleshooting
 
 ### Service Not Running
+
 - [ ] Check status: `sudo systemctl status compute-blade-agent`
 - [ ] Check logs: `sudo journalctl -u compute-blade-agent -f`
 - [ ] Check if binary exists: `ls -la /usr/local/bin/compute-blade-agent`
 - [ ] Check systemd unit: `cat /etc/systemd/system/compute-blade-agent.service`
 
 ### Installation Failed
+
 - [ ] Re-run Ansible playbook: `ansible-playbook site.yml --tags compute-blade-agent`
 - [ ] Check for network connectivity during installation
 - [ ] Verify sufficient disk space on nodes
 - [ ] Check /tmp directory permissions
 
 ### Hardware Not Detected
+
 - [ ] Verify physical hardware connection
 - [ ] Check dmesg: `sudo dmesg | grep -i compute`
 - [ ] Check hardware info: `lspci` or `lsusb`
@@ -126,7 +146,9 @@ kubectl apply -f manifests/compute-blade-agent-daemonset.yaml
 ## Configuration
 
 ### Global Configuration
+
 To enable/disable on all workers, edit `inventory/hosts.ini`:
+
 ```ini
 [k3s_cluster:vars]
 enable_compute_blade_agent=true  # or false
@@ -136,7 +158,9 @@ enable_compute_blade_agent=true  # or false
 - [ ] Saved inventory file
 
 ### Per-Node Configuration
+
 To enable/disable specific nodes, edit `inventory/hosts.ini`:
+
 ```ini
 [worker]
 cb-02 ansible_host=... enable_compute_blade_agent=false
@@ -148,7 +172,9 @@ cb-03 ansible_host=... enable_compute_blade_agent=true
 - [ ] Re-run playbook if changes made
 
 ### Agent Configuration
+
 Edit configuration on the node:
+
 ```bash
 ssh pi@<worker-ip>
 sudo vi /etc/compute-blade-agent/config.yaml
@@ -161,49 +187,62 @@ sudo systemctl restart compute-blade-agent
 ## Maintenance
 
 ### Restart Service
+
 ```bash
 ssh pi@<worker-ip>
 sudo systemctl restart compute-blade-agent
 ```
+
 - [ ] Service restarted
 - [ ] Service is still running
 
 ### View Real-time Logs
+
 ```bash
 ssh pi@<worker-ip>
 sudo journalctl -u compute-blade-agent -f
 ```
+
 - [ ] Monitor for any issues
 - [ ] Press Ctrl+C to exit
 
 ### Check Service on All Workers
+
 ```bash
 ansible worker -m shell -a "systemctl status compute-blade-agent" --become
 ```
+
 - [ ] All workers show active status
 
 ## Uninstall (if needed)
 
 ### Uninstall from Single Node
+
 ```bash
 ssh pi@<worker-ip>
 sudo bash /usr/local/bin/k3s-uninstall-compute-blade-agent.sh
 ```
+
 - [ ] Uninstall script executed
 - [ ] Service removed
 - [ ] Configuration cleaned up
 
 ### Uninstall from All Workers
+
 ```bash
 ansible worker -m shell -a "bash /usr/local/bin/k3s-uninstall-compute-blade-agent.sh" --become
 ```
+
 - [ ] All workers uninstalled
 
 ### Disable in Future Deployments
+
 Edit `inventory/hosts.ini`:
+
 ```ini
 enable_compute_blade_agent=false
 ```
+
 - [ ] Setting disabled
 - [ ] Won't be deployed on next playbook run
 
@@ -211,7 +250,7 @@ enable_compute_blade_agent=false
 
 - [ ] Read README.md compute-blade-agent section
 - [ ] Read COMPUTE_BLADE_AGENT.md quick reference
-- [ ] Check GitHub repo: https://github.com/compute-blade-community/compute-blade-agent
+- [ ] Check GitHub repo: [compute-blade-agent](https://github.com/compute-blade-community/compute-blade-agent)
 - [ ] Review Ansible role: `cat roles/compute-blade-agent/tasks/main.yml`
 
 ## Completion
@@ -227,7 +266,7 @@ enable_compute_blade_agent=false
 
 Document any issues, customizations, or special configurations here:
 
-```
+```text
 [Add notes here]
 ```
 

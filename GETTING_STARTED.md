@@ -11,16 +11,19 @@ This document provides a quick guide to deploy your k3s-ansible cluster with Com
 ## Quick Start (5 minutes)
 
 ### Step 1: Review Configuration
+
 ```bash
 cat inventory/hosts.ini
 ```
 
 Verify:
+
 - Master node IP is correct (cb-01)
 - Worker node IPs are correct (cb-02, cb-03, cb-04)
 - `enable_compute_blade_agent=true` is set
 
 ### Step 2: Test Connectivity
+
 ```bash
 ansible all -m ping
 ```
@@ -28,11 +31,13 @@ ansible all -m ping
 All nodes should respond with `pong`.
 
 ### Step 3: Deploy
+
 ```bash
 ansible-playbook site.yml
 ```
 
 This will:
+
 1. Prepare all nodes (10-15 minutes)
 2. Install K3s server on master (5 minutes)
 3. Install K3s agents on workers (5 minutes)
@@ -42,11 +47,13 @@ This will:
 **Total time**: ~30-45 minutes
 
 ### Step 4: Verify
+
 ```bash
 bash scripts/verify-compute-blade-agent.sh
 ```
 
 All workers should show:
+
 - ✓ Network: Reachable
 - ✓ Service Status: Running
 - ✓ Binary: Installed
@@ -56,17 +63,20 @@ All workers should show:
 ### Enable/Disable Agent
 
 To enable agent on all workers (default):
+
 ```ini
 [k3s_cluster:vars]
 enable_compute_blade_agent=true
 ```
 
 To disable agent:
+
 ```ini
 enable_compute_blade_agent=false
 ```
 
 To enable/disable on specific nodes:
+
 ```ini
 [worker]
 cb-02 ansible_host=192.168.30.102 ansible_user=pi enable_compute_blade_agent=true
@@ -77,32 +87,41 @@ cb-04 ansible_host=192.168.30.104 ansible_user=pi
 ## Deployment Options
 
 ### Option 1: Full Deployment (Recommended for new clusters)
+
 ```bash
 ansible-playbook site.yml
 ```
+
 Deploys K3s + compute-blade-agent + test application
 
 ### Option 2: Skip Test Application (Faster)
+
 ```bash
 ansible-playbook site.yml --skip-tags test
 ```
+
 Useful if cluster already has applications
 
 ### Option 3: Agent Only (Existing K3s cluster)
+
 ```bash
 ansible-playbook site.yml --tags compute-blade-agent
 ```
+
 Deploy agent to existing K3s cluster
 
 ### Option 4: Skip Agent
+
 ```bash
 ansible-playbook site.yml --skip-tags compute-blade-agent
 ```
+
 Deploy K3s without agent
 
 ## Verification
 
 ### Check Agent Status
+
 ```bash
 # From control machine
 bash scripts/verify-compute-blade-agent.sh
@@ -113,6 +132,7 @@ sudo systemctl status compute-blade-agent
 ```
 
 ### View Logs
+
 ```bash
 ssh pi@192.168.30.102
 sudo journalctl -u compute-blade-agent -f
@@ -121,6 +141,7 @@ sudo journalctl -u compute-blade-agent -f
 Press `Ctrl+C` to exit logs.
 
 ### Check Binary
+
 ```bash
 ssh pi@192.168.30.102
 /usr/local/bin/compute-blade-agent --version
@@ -129,12 +150,14 @@ ssh pi@192.168.30.102
 ## What Was Installed
 
 ### On Each Worker Node
+
 - **Binary**: `/usr/local/bin/compute-blade-agent`
 - **CLI Tool**: `/usr/local/bin/bladectl`
 - **Config**: `/etc/compute-blade-agent/config.yaml`
 - **Service**: `compute-blade-agent.service` (auto-start)
 
 ### Features Enabled
+
 - Hardware monitoring (temperature, fan speed, buttons)
 - Critical mode protection (overheat response)
 - LED identification (blade location)
@@ -144,6 +167,7 @@ ssh pi@192.168.30.102
 ## Troubleshooting
 
 ### Service Not Running
+
 ```bash
 ssh pi@192.168.30.102
 sudo systemctl status compute-blade-agent
@@ -151,11 +175,13 @@ sudo journalctl -u compute-blade-agent -n 50
 ```
 
 ### Re-run Deployment
+
 ```bash
 ansible-playbook site.yml --tags compute-blade-agent
 ```
 
 ### Check Installation on Node
+
 ```bash
 ssh pi@192.168.30.102
 ls -la /usr/local/bin/compute-blade-agent
@@ -171,11 +197,13 @@ sudo systemctl status compute-blade-agent
    - `README.md` - Full guide
 
 2. **Configure Monitoring** (Optional)
+
    ```bash
    kubectl apply -f manifests/compute-blade-agent-daemonset.yaml
    ```
 
 3. **Access Cluster** (If deployed K3s)
+
    ```bash
    export KUBECONFIG=$(pwd)/kubeconfig
    kubectl get nodes
@@ -188,21 +216,25 @@ sudo systemctl status compute-blade-agent
 ## Common Tasks
 
 ### Restart Agent on All Workers
+
 ```bash
 ansible worker -m shell -a "sudo systemctl restart compute-blade-agent" --become
 ```
 
 ### View Agent Logs on All Workers
+
 ```bash
 ansible worker -m shell -a "sudo journalctl -u compute-blade-agent -n 20" --become
 ```
 
 ### Deploy Only to Specific Nodes
+
 ```bash
 ansible-playbook site.yml --tags compute-blade-agent --limit cb-02,cb-03
 ```
 
 ### Disable Agent for Next Deployment
+
 ```bash
 # Edit inventory/hosts.ini
 enable_compute_blade_agent=false
@@ -214,11 +246,13 @@ ansible-playbook site.yml --tags compute-blade-agent
 ## Uninstall
 
 ### Uninstall Agent (All Workers)
+
 ```bash
 ansible worker -m shell -a "bash /usr/local/bin/k3s-uninstall-compute-blade-agent.sh" --become
 ```
 
 ### Uninstall K3s (All Nodes)
+
 ```bash
 ansible all -m shell -a "bash /usr/local/bin/k3s-uninstall.sh" --become
 ```
@@ -228,11 +262,11 @@ ansible all -m shell -a "bash /usr/local/bin/k3s-uninstall.sh" --become
 - **Quick Reference**: `cat COMPUTE_BLADE_AGENT.md`
 - **Checklist**: `cat DEPLOYMENT_CHECKLIST.md`
 - **Full Guide**: `cat README.md`
-- **GitHub**: https://github.com/compute-blade-community/compute-blade-agent
+- **GitHub**: [compute-blade-agent](https://github.com/compute-blade-community/compute-blade-agent)
 
 ## File Locations
 
-```
+```bash
 k3s-ansible/
 ├── inventory/hosts.ini                    ← Configuration
 ├── site.yml                               ← Main playbook

@@ -11,7 +11,7 @@ Ansible playbook to deploy a k3s Kubernetes cluster on Raspberry Pi Compute Modu
 
 ## Project Structure
 
-```
+```bash
 k3s-ansible/
 ├── ansible.cfg                  # Ansible configuration
 ├── site.yml                     # Main playbook
@@ -123,6 +123,7 @@ ansible-playbook site.yml --tags prereq
 ## What the Playbook Does
 
 ### Prerequisites Role (`prereq`)
+
 - Sets hostname on each node
 - Updates and upgrades system packages
 - Installs required packages (curl, wget, git, iptables, etc.)
@@ -132,6 +133,7 @@ ansible-playbook site.yml --tags prereq
 - Reboots if necessary
 
 ### K3s Server Role (`k3s-server`)
+
 - Installs k3s in server mode on master node(s)
 - Configures k3s with Flannel VXLAN backend (optimized for ARM)
 - Retrieves and stores the node token for workers
@@ -139,11 +141,13 @@ ansible-playbook site.yml --tags prereq
 - Fetches kubeconfig to local machine for kubectl access
 
 ### K3s Agent Role (`k3s-agent`)
+
 - Installs k3s in agent mode on worker nodes
 - Joins workers to the cluster using the master's token
 - Configures agents to connect to the master
 
 ### K3s Deploy Test Role (`k3s-deploy-test`)
+
 - Waits for all cluster nodes to be ready
 - Deploys the nginx test application with 5 replicas
 - Verifies deployment is successful
@@ -163,7 +167,7 @@ kubectl get nodes
 
 You should see all your nodes in Ready state:
 
-```
+```bash
 NAME          STATUS   ROLES                  AGE   VERSION
 pi-master     Ready    control-plane,master   5m    v1.28.3+k3s1
 pi-worker-1   Ready    <none>                 3m    v1.28.3+k3s1
@@ -271,6 +275,7 @@ ansible-playbook site.yml --tags deploy-test
 ```
 
 The Ansible role will:
+
 - Wait for all nodes to be ready
 - Deploy the nginx application with ingress
 - Wait for all pods to be running
@@ -303,7 +308,7 @@ kubectl --kubeconfig=./kubeconfig get ingress
 
 You should see output similar to:
 
-```
+```bash
 NAME         READY   UP-TO-DATE   AVAILABLE   AGE
 nginx-test   5/5     5            5           1m
 
@@ -402,12 +407,14 @@ ansible-playbook reboot.yml --limit pi-worker-1
 ### Check k3s service status
 
 On master:
+
 ```bash
 sudo systemctl status k3s
 sudo journalctl -u k3s -f
 ```
 
 On workers:
+
 ```bash
 sudo systemctl status k3s-agent
 sudo journalctl -u k3s-agent -f
