@@ -18,8 +18,8 @@ cat inventory/hosts.ini
 
 Verify:
 
-- Master node IP is correct (cb-01)
-- Worker node IPs are correct (cb-02, cb-03, cb-04)
+- Master node IP is correct (cm4-01)
+- Worker node IPs are correct (cm4-02, cm4-03, cm4-04)
 - `enable_compute_blade_agent=true` is set
 
 ### Step 2: Test Connectivity
@@ -79,9 +79,9 @@ To enable/disable on specific nodes:
 
 ```ini
 [worker]
-cb-02 ansible_host=192.168.30.102 ansible_user=pi enable_compute_blade_agent=true
-cb-03 ansible_host=192.168.30.103 ansible_user=pi enable_compute_blade_agent=false
-cb-04 ansible_host=192.168.30.104 ansible_user=pi
+cm4-02 ansible_host=192.168.30.102 ansible_user=pi enable_compute_blade_agent=true
+cm4-03 ansible_host=192.168.30.103 ansible_user=pi enable_compute_blade_agent=false
+cm4-04 ansible_host=192.168.30.104 ansible_user=pi
 ```
 
 ## Deployment Options
@@ -230,7 +230,7 @@ ansible worker -m shell -a "sudo journalctl -u compute-blade-agent -n 20" --beco
 ### Deploy Only to Specific Nodes
 
 ```bash
-ansible-playbook site.yml --tags compute-blade-agent --limit cb-02,cb-03
+ansible-playbook site.yml --tags compute-blade-agent --limit cm4-02,cm4-03
 ```
 
 ### Disable Agent for Next Deployment

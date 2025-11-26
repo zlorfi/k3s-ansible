@@ -163,8 +163,8 @@ To enable/disable specific nodes, edit `inventory/hosts.ini`:
 
 ```ini
 [worker]
-cb-02 ansible_host=... enable_compute_blade_agent=false
-cb-03 ansible_host=... enable_compute_blade_agent=true
+cm4-02 ansible_host=... enable_compute_blade_agent=false
+cm4-03 ansible_host=... enable_compute_blade_agent=true
 ```
 
 - [ ] Per-node settings configured as needed

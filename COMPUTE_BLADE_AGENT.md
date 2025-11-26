@@ -39,9 +39,9 @@ Edit `inventory/hosts.ini`:
 
 ```ini
 [worker]
-cb-02 ansible_host=192.168.30.102 ansible_user=pi enable_compute_blade_agent=true
-cb-03 ansible_host=192.168.30.103 ansible_user=pi enable_compute_blade_agent=false
-cb-04 ansible_host=192.168.30.104 ansible_user=pi
+cm4-02 ansible_host=192.168.30.102 ansible_user=pi enable_compute_blade_agent=true
+cm4-03 ansible_host=192.168.30.103 ansible_user=pi enable_compute_blade_agent=false
+cm4-04 ansible_host=192.168.30.104 ansible_user=pi
 ```
 
 ## Verification
