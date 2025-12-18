@@ -1,0 +1,62 @@
+[global_tags]
+  hostname = "{{ inventory_hostname }}"
+  node_type = "{{ 'master' if inventory_hostname in groups['master'] else 'worker' }}"
+
+[agent]
+  interval = "10s"
+  round_interval = true
+  metric_batch_size = 1000
+  metric_buffer_limit = 10000
+  collection_jitter = "0s"
+  flush_interval = "10s"
+  flush_jitter = "0s"
+  precision = ""
+  hostname = "{{ inventory_hostname }}"
+  omit_hostname = false
+
+[[outputs.influxdb_v2]]
+  urls = ["http://{{ influxdb_host }}:{{ influxdb_port }}"]
+  token = "{{ influxdb_token }}"
+  organization = "{{ influxdb_org }}"
+  bucket = "{{ influxdb_bucket }}"
+  timeout = "5s"
+  user_agent = "telegraf-rpi-cluster"
+
+# System metrics
+[[inputs.cpu]]
+  percpu = true
+  totalcpu = true
+  collect_cpu_time = false
+  report_active = false
+
+[[inputs.disk]]
+  ignore_fs = ["tmpfs", "devtmpfs", "devfs", "iso9660", "overlay", "aufs", "squashfs"]
+
+[[inputs.diskio]]
+
+[[inputs.mem]]
+
+[[inputs.processes]]
+
+[[inputs.swap]]
+
+[[inputs.system]]
+
+[[inputs.netstat]]
+
+[[inputs.net]]
+  interfaces = ["eth0", "wlan0", "enp*", "wlp*", "docker*", "veth*"]
+
+# Thermal metrics (Raspberry Pi specific)
+[[inputs.exec]]
+  commands = [
+    "python3 -c \"import os; temp_file='/sys/class/thermal/thermal_zone0/temp'; print('cpu_temp,unit=celsius value=' + str(int(open(temp_file).read())/1000) if os.path.exists(temp_file) else 'cpu_temp,unit=celsius value=0') if os.path.exists(temp_file) else ''\""
+  ]
+  timeout = "5s"
+  data_format = "influx"
+  name_suffix = "_thermal"
+
+# Process metrics for k3s components
+[[inputs.procstat]]
+  pattern = "k3s"
+  prefix = "k3s"

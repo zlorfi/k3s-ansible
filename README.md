@@ -54,7 +54,7 @@ pi-worker-3 ansible_host=192.168.30.104 ansible_user=pi
 
 In `inventory/hosts.ini`, you can customize:
 
-- `k3s_version`: K3s version to install (default: v1.28.3+k3s1)
+- `k3s_version`: K3s version to install (default: v1.34.2+k3s1)
 - `extra_server_args`: Additional arguments for k3s server
 - `extra_agent_args`: Additional arguments for k3s agent
 - `extra_packages`: List of additional packages to install on all nodes
@@ -86,9 +86,112 @@ To add packages, append them to the comma-separated list. To disable extra packa
 
 ### Test Connectivity
 
+Basic connectivity test:
+
 ```bash
 ansible all -m ping
 ```
+
+### Gather Node Information
+
+Display critical information from all nodes (uptime, temperature, memory, disk usage, load average):
+
+### Deploy Telegraf for Metrics Collection
+
+Stream system metrics from all nodes to InfluxDB using Telegraf client.
+
+**Prerequisites:**
+
+- InfluxDB instance running and accessible
+- API token with write permissions to your bucket
+
+**Setup:**
+
+1. Configure your InfluxDB credentials in `.env` file (already created):
+
+```bash
+# .env file (keep this secret, never commit!)
+INFLUXDB_HOST=192.168.10.10
+INFLUXDB_PORT=8086
+INFLUXDB_ORG=family
+INFLUXDB_BUCKET=rpi-cluster
+INFLUXDB_TOKEN=your-api-token-here
+```
+
+2. Deploy Telegraf to all nodes:
+
+```bash
+ansible-playbook telegraf.yml
+```
+
+Or deploy to specific nodes:
+
+```bash
+# Only worker nodes
+ansible-playbook telegraf.yml --limit worker
+
+# Only master nodes
+ansible-playbook telegraf.yml --limit master
+
+# Specific node
+ansible-playbook telegraf.yml --limit cm4-02
+```
+
+**Metrics Collected:**
+
+- **System**: CPU (per-core and total), memory, swap, processes, system load
+- **Disk**: Disk I/O, disk usage, inodes
+- **Network**: Network interfaces, packets, errors
+- **Thermal**: CPU temperature (Raspberry Pi specific)
+- **K3s**: Process metrics for k3s components
+
+**Verify Installation:**
+
+Check Telegraf status on a node:
+
+```bash
+ssh pi@<node-ip>
+sudo systemctl status telegraf
+sudo journalctl -u telegraf -f
+```
+
+**View Metrics in InfluxDB:**
+
+Once configured, metrics will appear in your InfluxDB instance under the `rpi-cluster` bucket with tags for each node hostname and node type (master/worker).
+
+### Grafana Dashboard for Telegraf Metrics
+
+A pre-built Grafana dashboard is included to visualize all collected metrics. The dashboard displays:
+
+- CPU usage across all nodes
+- Memory usage (percentage)
+- CPU temperature (Raspberry Pi specific)
+- System load averages
+- Disk usage
+- Network traffic
+
+**Import the Dashboard:**
+
+1. Open Grafana and go to **Dashboards** → **New** → **Import**
+2. Upload the dashboard file: `grafana/rpi-cluster-dashboard.json`
+3. Select your InfluxDB datasource (must be named `influx`)
+4. Click **Import**
+
+**Datasource Requirements:**
+
+The dashboard expects your InfluxDB datasource in Grafana to be named exactly `influx`. If your datasource has a different name, either:
+
+- Rename your datasource in Grafana settings, or
+- Edit the dashboard JSON and replace all `"uid": "influx"` references with your datasource name
+
+**Customize the Dashboard:**
+
+You can modify the dashboard after import to:
+
+- Adjust time ranges (default: last 6 hours)
+- Add alerts for high CPU/temperature/memory
+- Add more panels for network metrics
+- Create node-specific views using Grafana variables
 
 ### Deploy K3s Cluster
 
@@ -169,9 +272,9 @@ You should see all your nodes in Ready state:
 
 ```bash
 NAME          STATUS   ROLES                  AGE   VERSION
-pi-master     Ready    control-plane,master   5m    v1.28.3+k3s1
-pi-worker-1   Ready    <none>                 3m    v1.28.3+k3s1
-pi-worker-2   Ready    <none>                 3m    v1.28.3+k3s1
+pi-master     Ready    control-plane,master   5m    v1.34.2+k3s1
+pi-worker-1   Ready    <none>                 3m    v1.34.2+k3s1
+pi-worker-2   Ready    <none>                 3m    v1.34.2+k3s1
 ```
 
 ## Accessing the Cluster
