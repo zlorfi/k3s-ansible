@@ -16,7 +16,7 @@
     - name: Install k3s on primary master
       shell: |
         INSTALL_K3S_VERSION="{{ k3s_version }}" \
-        INSTALL_K3S_EXEC="server {{ extra_server_args }}" \
+        INSTALL_K3S_EXEC="server --cluster-init {{ extra_server_args }}" \
         sh /tmp/k3s-install.sh
       register: k3s_install_result
       changed_when: "'installed' in k3s_install_result.stdout or 'upgraded' in k3s_install_result.stdout"
@@ -68,9 +68,7 @@
     - name: Install k3s on additional master
       shell: |
         INSTALL_K3S_VERSION="{{ k3s_version }}" \
-        K3S_URL="{{ k3s_url }}" \
-        K3S_TOKEN="{{ k3s_token }}" \
-        INSTALL_K3S_EXEC="server {{ extra_server_args }}" \
+        INSTALL_K3S_EXEC="server --server {{ k3s_url }} --token '{{ k3s_token }}' {{ extra_server_args }}" \
         sh /tmp/k3s-install.sh
       register: k3s_install_result
       changed_when: "'installed' in k3s_install_result.stdout or 'upgraded' in k3s_install_result.stdout"
