@@ -850,13 +850,20 @@ To use external domains (like `test.zlor.fi`) with your k3s cluster ingress, you
 
 On your DNS server, add **A records** pointing to your k3s cluster nodes:
 
-#### Option A: Single Record (Simpler, Master Node Only)
+#### Option A: Single Record (Master Node Only) - Simplest
+
+If your DNS only allows one A record:
 
 ```dns
 test.zlor.fi  A  192.168.30.101
 ```
 
-#### Option B: Multiple Records (Load Balanced Across All Nodes)
+**Pros:** Simple, works with any DNS server
+**Cons:** No failover if master node is down
+
+#### Option B: Multiple Records (Load Balanced) - Best Redundancy
+
+If your DNS supports multiple A records:
 
 ```dns
 test.zlor.fi  A  192.168.30.101
@@ -865,7 +872,23 @@ test.zlor.fi  A  192.168.30.103
 test.zlor.fi  A  192.168.30.104
 ```
 
-DNS clients will distribute requests across all configured IPs (round-robin).
+DNS clients will distribute requests across all nodes (round-robin).
+
+**Pros:** Load balanced, automatic failover
+**Cons:** Requires DNS server support for multiple A records
+
+#### Option C: Virtual IP (VIP) with Keepalived - Best of Both Worlds
+
+If your DNS only allows one A record but you want redundancy:
+
+```dns
+test.zlor.fi  A  192.168.30.100
+```
+
+Set up a virtual IP that automatically floats between nodes. See "Virtual IP Setup" below for detailed instructions.
+
+**Pros:** Single DNS record, automatic failover, load balancing
+**Cons:** Requires additional setup with Keepalived
 
 ### Step 2: Configure Cluster Nodes for External DNS
 
@@ -1087,6 +1110,209 @@ spec:
 
 ```bash
 kubectl apply -f manifests/nginx-test-deployment.yaml
+```
+
+## Virtual IP Setup (Option C)
+
+If your DNS server only allows a single A record but you want high availability across all nodes, use a Virtual IP (VIP) with Keepalived.
+
+### How It Works
+
+- A virtual IP (192.168.30.100) floats between cluster nodes using VRRP protocol
+- The master node holds the VIP by default
+- If the master fails, a worker node automatically takes over
+- All traffic reaches the cluster through a single IP address
+- Clients experience automatic failover with minimal downtime
+
+### Prerequisites
+
+- All nodes must be on the same network segment
+- Network must support ARP protocol (standard on most networks)
+- No other services should use 192.168.30.100
+
+### Installation
+
+#### Step 1: Update Your VIP Address
+
+Edit `vip-setup.yml` and change the VIP to an unused IP on your network:
+
+```yaml
+vars:
+  vip_address: "192.168.30.100"  # Change this to your desired VIP
+  vip_interface: "eth0"           # Change if your interface is different
+```
+
+#### Step 2: Run the VIP Setup Playbook
+
+```bash
+ansible-playbook vip-setup.yml
+```
+
+This will:
+
+- Install Keepalived on all nodes
+- Configure VRRP with master on cm4-01 and backup on workers
+- Set up health checks for automatic failover
+- Enable the virtual IP
+
+#### Step 3: Verify VIP is Active
+
+Check that the VIP is assigned to the master node:
+
+```bash
+# From your local machine
+ping 192.168.30.100
+
+# From any cluster node
+ssh pi@192.168.30.101
+ip addr show
+
+# Look for your VIP address in the output
+```
+
+#### Step 4: Update DNS Records
+
+Now you can use just one A record pointing to the VIP:
+
+```dns
+test.zlor.fi  A  192.168.30.100
+```
+
+#### Step 5: Update Ingress (Optional)
+
+If you want to reference the VIP in your ingress, update the manifest:
+
+```yaml
+spec:
+  rules:
+  - host: test.zlor.fi
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-test
+            port:
+              number: 80
+```
+
+The ingress is already correct - it will reach the cluster through any node IP.
+
+### Monitoring the VIP
+
+Check VIP status and failover behavior:
+
+```bash
+# View Keepalived status
+ssh pi@192.168.30.101
+systemctl status keepalived
+
+# Watch VIP transitions (open in separate terminal)
+watch 'ip addr show | grep 192.168.30.100'
+
+# View Keepalived logs
+sudo journalctl -u keepalived -f
+
+# Check health check script
+sudo cat /usr/local/bin/check_apiserver.sh
+```
+
+### Testing Failover
+
+To test automatic failover:
+
+1. Note which node has the VIP:
+
+```bash
+for ip in 192.168.30.{101..104}; do
+  echo "=== $ip ==="
+  ssh pi@$ip "ip addr show | grep 192.168.30.100" 2>/dev/null || echo "Not on this node"
+done
+```
+
+1. SSH into the node holding the VIP and stop keepalived:
+
+```bash
+ssh pi@192.168.30.101  # or whichever node has the VIP
+sudo systemctl stop keepalived
+```
+
+1. Watch the VIP migrate to another node:
+
+```bash
+# From another terminal, watch the migration
+ping 192.168.30.100 -c 5
+# Connection may drop briefly, then resume on new node
+```
+
+1. Restart keepalived on the original node:
+
+```bash
+sudo systemctl start keepalived
+```
+
+### Troubleshooting VIP
+
+#### VIP is not appearing on any node
+
+Check if Keepalived is running:
+
+```bash
+ssh pi@192.168.30.101
+sudo systemctl status keepalived
+sudo journalctl -u keepalived -n 20
+```
+
+Verify the interface name:
+
+```bash
+ip route | grep default  # Should show your interface name
+```
+
+Update `vip_interface` in `vip-setup.yml` if needed and re-run.
+
+#### VIP keeps switching between nodes
+
+This indicates the health check is failing. Verify:
+
+```bash
+# Check if API server is responding
+curl -k https://127.0.0.1:6443/healthz
+
+# Check the health check script
+cat /usr/local/bin/check_apiserver.sh
+sudo bash /usr/local/bin/check_apiserver.sh
+```
+
+#### DNS resolves but connections time out
+
+Verify all nodes have the VIP configured:
+
+```bash
+for ip in 192.168.30.{101..104}; do
+  echo "=== $ip ==="
+  ssh pi@$ip "ip addr show | grep 192.168.30.100"
+done
+```
+
+Test direct connectivity to the VIP from each node:
+
+```bash
+ssh pi@192.168.30.101
+curl -H "Host: test.zlor.fi" http://192.168.30.100
+```
+
+### Disabling VIP
+
+If you no longer need the VIP:
+
+```bash
+# Stop Keepalived on all nodes
+ansible all -m systemd -a "name=keepalived state=stopped enabled=no" --become
+
+# Remove configuration
+ansible all -m file -a "path=/etc/keepalived/keepalived.conf state=absent" --become
 ```
 
 ## Uninstall
