@@ -842,6 +842,253 @@ sudo /usr/local/bin/k3s-uninstall-compute-blade-agent.sh 2>/dev/null || echo "No
 ansible-playbook site.yml --tags compute-blade-agent
 ```
 
+## External DNS Configuration
+
+To use external domains (like `test.zlor.fi`) with your k3s cluster ingress, you need to configure DNS and update your nodes.
+
+### Step 1: Configure DNS Server Records
+
+On your DNS server, add **A records** pointing to your k3s cluster nodes:
+
+#### Option A: Single Record (Simpler, Master Node Only)
+
+```dns
+test.zlor.fi  A  192.168.30.101
+```
+
+#### Option B: Multiple Records (Load Balanced Across All Nodes)
+
+```dns
+test.zlor.fi  A  192.168.30.101
+test.zlor.fi  A  192.168.30.102
+test.zlor.fi  A  192.168.30.103
+test.zlor.fi  A  192.168.30.104
+```
+
+DNS clients will distribute requests across all configured IPs (round-robin).
+
+### Step 2: Configure Cluster Nodes for External DNS
+
+K3s nodes need to be able to resolve external DNS queries. Update the DNS resolver on all nodes:
+
+#### Option A: Ansible Playbook (Recommended)
+
+Create a new playbook `dns-config.yml`:
+
+```yaml
+---
+- name: Configure external DNS resolver
+  hosts: all
+  become: yes
+  tasks:
+    - name: Update /etc/resolv.conf with custom DNS
+      copy:
+        content: |
+          nameserver 8.8.8.8
+          nameserver 8.8.4.4
+          nameserver 192.168.1.1
+        dest: /etc/resolv.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Update systemd-resolved
+
+    - name: Make resolv.conf immutable
+      file:
+        path: /etc/resolv.conf
+        attributes: '+i'
+        state: file
+
+    - name: Configure systemd-resolved for external DNS
+      copy:
+        content: |
+          [Resolve]
+          DNS=8.8.8.8 8.8.4.4 192.168.1.1
+          FallbackDNS=8.8.8.8
+          DNSSECNegativeTrustAnchors=zlor.fi
+        dest: /etc/systemd/resolved.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart systemd-resolved
+
+  handlers:
+    - name: Update systemd-resolved
+      systemd:
+        name: systemd-resolved
+        state: restarted
+        daemon_reload: yes
+```
+
+Apply the playbook:
+
+```bash
+ansible-playbook dns-config.yml
+```
+
+#### Option B: Manual Configuration on Each Node
+
+SSH into each node and update DNS:
+
+```bash
+ssh pi@192.168.30.101
+sudo nano /etc/systemd/resolved.conf
+```
+
+Add or modify:
+
+```ini
+[Resolve]
+DNS=8.8.8.8 8.8.4.4 192.168.1.1
+FallbackDNS=8.8.8.8
+DNSSECNegativeTrustAnchors=zlor.fi
+```
+
+Save and restart:
+
+```bash
+sudo systemctl restart systemd-resolved
+```
+
+Verify DNS is working:
+
+```bash
+nslookup test.zlor.fi
+dig test.zlor.fi
+```
+
+### Step 3: Update Ingress Configuration
+
+Your nginx-test deployment has already been updated to include `test.zlor.fi`. Verify the ingress:
+
+```bash
+kubectl get ingress nginx-test -o yaml
+```
+
+You should see:
+
+```yaml
+spec:
+  rules:
+  - host: test.zlor.fi
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-test
+            port:
+              number: 80
+```
+
+### Step 4: Test External Domain Access
+
+Once DNS is configured, test access from your local machine:
+
+```bash
+# Test DNS resolution
+nslookup test.zlor.fi
+
+# Test HTTP access
+curl http://test.zlor.fi
+
+# With verbose output
+curl -v http://test.zlor.fi
+
+# Test from all cluster IPs
+for ip in 192.168.30.{101..104}; do
+  echo "Testing $ip:"
+  curl -H "Host: test.zlor.fi" http://$ip
+done
+```
+
+### Troubleshooting DNS
+
+#### DNS Resolution Failing
+
+Check if systemd-resolved is running:
+
+```bash
+systemctl status systemd-resolved
+```
+
+Test DNS from a node:
+
+```bash
+ssh pi@192.168.30.101
+nslookup test.zlor.fi
+dig test.zlor.fi @8.8.8.8
+```
+
+#### Ingress Not Responding
+
+Check if Traefik is running:
+
+```bash
+kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik
+```
+
+Check ingress status:
+
+```bash
+kubectl get ingress
+kubectl describe ingress nginx-test
+```
+
+#### Request Timing Out
+
+Verify network connectivity:
+
+```bash
+# From your machine
+ping 192.168.30.101
+ping 192.168.30.102
+
+# From a cluster node
+ssh pi@192.168.30.101
+ping test.zlor.fi
+curl -v http://test.zlor.fi
+```
+
+### Adding More Domains
+
+To add additional domains (e.g., `api.zlor.fi`, `admin.zlor.fi`):
+
+1. Add DNS A records for each domain pointing to your cluster nodes
+1. Update the ingress YAML with new rules:
+
+```yaml
+spec:
+  rules:
+  - host: test.zlor.fi
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: nginx-test
+            port:
+              number: 80
+  - host: api.zlor.fi
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+            port:
+              number: 8080
+```
+
+1. Apply the updated manifest:
+
+```bash
+kubectl apply -f manifests/nginx-test-deployment.yaml
+```
+
 ## Uninstall
 
 To completely remove k3s from all nodes:
