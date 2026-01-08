@@ -159,7 +159,7 @@ metadata:
   labels:
     app: nginx-test
 spec:
-  replicas: 5
+  replicas: 15
   selector:
     matchLabels:
       app: nginx-test
@@ -238,26 +238,6 @@ metadata:
 spec:
   rules:
   - host: test.zlor.fi
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: nginx-test
-            port:
-              number: 80
-  - host: nginx-test.local
-    http:
-      paths:
-      - path: /
-        pathType: Prefix
-        backend:
-          service:
-            name: nginx-test
-            port:
-              number: 80
-  - host: nginx.pi.local
     http:
       paths:
       - path: /
