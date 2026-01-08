@@ -500,6 +500,163 @@ When you're done testing:
 kubectl delete -f manifests/nginx-test-deployment.yaml
 ```
 
+## High Availability - Multi-Master Cluster
+
+This deployment supports a **3-node highly available Kubernetes cluster** with multiple control-plane nodes for redundancy.
+
+### Current Setup
+
+The cluster is configured with:
+
+- **Master Nodes (Control-Plane)**: cm4-01, cm4-02, cm4-03
+- **Worker Nodes**: cm4-04
+- **Virtual IP (VIP)**: 192.168.30.100 (via MikroTik router)
+
+### Why Multi-Master?
+
+With 3 control-plane nodes:
+
+- **No Single Point of Failure**: If one master fails, the cluster continues operating
+- **High Availability**: Automatic failover between masters
+- **Better Uptime**: Can perform maintenance on one master while others serve the cluster
+- **Load Distribution**: API server and etcd are distributed across 3 nodes
+
+### How It Works
+
+1. **Primary Master (cm4-01)**:
+   - Initializes the cluster and creates the token
+   - All other nodes use its token to join
+
+2. **Additional Masters (cm4-02, cm4-03)**:
+   - Join the cluster using the token from the primary master
+   - Automatically become part of the control-plane
+   - Synchronized with the primary master
+
+3. **Worker Nodes (cm4-04)**:
+   - Join the cluster as worker nodes
+   - Can handle workload and are not part of control-plane
+
+4. **Virtual IP (192.168.30.100)**:
+   - MikroTik router provides a single entry point to the cluster
+   - Automatically routes to available control-plane nodes
+   - DNS points to this VIP for seamless failover
+
+### Promoting Additional Masters
+
+To add more masters or promote a worker to master:
+
+1. Edit `inventory/hosts.ini` and move the node to `[master]` group:
+
+   ```ini
+   [master]
+   cm4-01 ansible_host=192.168.30.101 ansible_user=pi k3s_server_init=true
+   cm4-02 ansible_host=192.168.30.102 ansible_user=pi k3s_server_init=false
+   cm4-03 ansible_host=192.168.30.103 ansible_user=pi k3s_server_init=false
+   # To promote cm4-04 to master:
+   # cm4-04 ansible_host=192.168.30.104 ansible_user=pi k3s_server_init=false
+
+   [worker]
+   # Workers only
+   ```
+
+2. Run the deployment playbook:
+
+   ```bash
+   ansible-playbook site.yml --tags k3s-server
+   ```
+
+   The playbook automatically:
+   - Installs k3s server on the new master
+   - Joins it to the existing cluster
+   - Synchronizes with other control-plane nodes
+
+### Monitoring Master Health
+
+Check the status of all control-plane nodes:
+
+```bash
+kubectl get nodes -o wide | grep control-plane
+# or
+kubectl get nodes -L node-role.kubernetes.io/control-plane
+```
+
+To see which nodes are control-plane:
+
+```bash
+kubectl get nodes --show-labels | grep control-plane
+```
+
+Monitor etcd status across masters:
+
+```bash
+# Connect to any master
+ssh pi@192.168.30.101
+
+# Check etcd status
+sudo /var/lib/rancher/k3s/data/*/bin/kubectl get nodes -n kube-system
+```
+
+### Master Failover
+
+If a master node fails:
+
+1. The cluster detects the failure within ~30 seconds
+2. etcd automatically removes the failed node
+3. Remaining masters continue operating
+4. New pods are scheduled on healthy nodes
+
+To see the status:
+
+```bash
+kubectl get nodes -o wide
+```
+
+To recover a failed master, simply:
+
+```bash
+# On the failed node, reset it
+ssh pi@<failed-master-ip>
+sudo /usr/local/bin/k3s-uninstall.sh
+
+# Then re-run the playbook to rejoin it
+ansible-playbook site.yml --tags k3s-server --limit <failed-master>
+```
+
+### Demoting a Master to Worker
+
+To remove a master from control-plane and make it a worker:
+
+1. Edit `inventory/hosts.ini`:
+
+   ```ini
+   [master]
+   cm4-01 ansible_host=192.168.30.101 ansible_user=pi k3s_server_init=true
+   cm4-02 ansible_host=192.168.30.102 ansible_user=pi k3s_server_init=false
+
+   [worker]
+   cm4-03 ansible_host=192.168.30.103 ansible_user=pi
+   cm4-04 ansible_host=192.168.30.104 ansible_user=pi
+   ```
+
+2. Drain the node:
+
+   ```bash
+   kubectl drain cm4-03 --ignore-daemonsets --delete-emptydir-data
+   ```
+
+3. Reset the node:
+
+   ```bash
+   ssh pi@192.168.30.103
+   sudo /usr/local/bin/k3s-uninstall.sh
+   ```
+
+4. Re-run the deployment:
+
+   ```bash
+   ansible-playbook site.yml --tags k3s-agent --limit cm4-03
+   ```
+
 ## Maintenance
 
 ### Updating the Cluster

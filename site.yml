@@ -9,8 +9,8 @@
     - prereq
     - prepare
 
-- name: Setup k3s server
-  hosts: master
+- name: Setup primary k3s master (control-plane node 1)
+  hosts: "{{ groups['master'][0] }}"
   become: true
   roles:
     - role: k3s-server
@@ -19,7 +19,18 @@
     - server
     - master
 
-- name: Setup k3s agents
+- name: Setup additional k3s masters (control-plane nodes 2+)
+  hosts: "{{ groups['master'][1:] | default([]) }}"
+  serial: 1
+  become: true
+  roles:
+    - role: k3s-server
+  tags:
+    - k3s-server
+    - server
+    - master
+
+- name: Setup k3s agents (worker nodes)
   hosts: worker
   become: true
   roles:
@@ -29,7 +40,7 @@
     - agent
     - worker
 
-- name: Install compute-blade-agent
+- name: Install compute-blade-agent on workers
   hosts: worker
   become: true
   roles:
@@ -39,7 +50,7 @@
     - blade-agent
 
 - name: Deploy test applications
-  hosts: master
+  hosts: "{{ groups['master'][0] }}"
   gather_facts: true
   become: false
   roles:

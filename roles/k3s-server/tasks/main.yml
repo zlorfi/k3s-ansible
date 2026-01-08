@@ -10,40 +10,80 @@
     dest: /tmp/k3s-install.sh
     mode: '0755'
 
-- name: Install or upgrade k3s server
-  shell: |
-    INSTALL_K3S_VERSION="{{ k3s_version }}" \
-    INSTALL_K3S_EXEC="server {{ extra_server_args }}" \
-    sh /tmp/k3s-install.sh
-  register: k3s_install_result
-  changed_when: "'installed' in k3s_install_result.stdout or 'upgraded' in k3s_install_result.stdout"
+# Initialize the first master node (cm4-01)
+- name: Install or upgrade k3s server (Primary Master)
+  block:
+    - name: Install k3s on primary master
+      shell: |
+        INSTALL_K3S_VERSION="{{ k3s_version }}" \
+        INSTALL_K3S_EXEC="server {{ extra_server_args }}" \
+        sh /tmp/k3s-install.sh
+      register: k3s_install_result
+      changed_when: "'installed' in k3s_install_result.stdout or 'upgraded' in k3s_install_result.stdout"
 
-- name: Wait for k3s to be ready
-  wait_for:
-    port: 6443
-    delay: 10
-    timeout: 300
+    - name: Wait for k3s to be ready
+      wait_for:
+        port: 6443
+        delay: 10
+        timeout: 300
 
-- name: Wait for node-token file to be created
-  wait_for:
-    path: /var/lib/rancher/k3s/server/node-token
-    state: present
-    timeout: 300
+    - name: Wait for node-token file to be created
+      wait_for:
+        path: /var/lib/rancher/k3s/server/node-token
+        state: present
+        timeout: 300
 
-- name: Read node token
-  slurp:
-    src: /var/lib/rancher/k3s/server/node-token
-  register: node_token
+    - name: Read node token
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: node_token
 
-- name: Store master node token
-  set_fact:
-    k3s_node_token: "{{ node_token.content | b64decode | trim }}"
+    - name: Store master node token
+      set_fact:
+        k3s_node_token: "{{ node_token.content | b64decode | trim }}"
 
-- name: Add node token to dummy host
-  add_host:
-    name: "k3s_token_holder"
-    token: "{{ k3s_node_token }}"
+    - name: Add node token to dummy host
+      add_host:
+        name: "k3s_token_holder"
+        token: "{{ k3s_node_token }}"
+      run_once: true
 
+  when: k3s_server_init | default(false) | bool
+
+# Join additional master nodes to the cluster
+- name: Install or upgrade k3s server (Additional Masters)
+  block:
+    - name: Wait for primary master to be ready
+      wait_for:
+        host: "{{ hostvars[groups['master'][0]]['ansible_host'] }}"
+        port: 6443
+        delay: 10
+        timeout: 300
+
+    - name: Get cluster credentials
+      set_fact:
+        k3s_url: "https://{{ hostvars[groups['master'][0]]['ansible_host'] }}:6443"
+        k3s_token: "{{ hostvars['k3s_token_holder']['token'] }}"
+
+    - name: Install k3s on additional master
+      shell: |
+        INSTALL_K3S_VERSION="{{ k3s_version }}" \
+        K3S_URL="{{ k3s_url }}" \
+        K3S_TOKEN="{{ k3s_token }}" \
+        INSTALL_K3S_EXEC="server {{ extra_server_args }}" \
+        sh /tmp/k3s-install.sh
+      register: k3s_install_result
+      changed_when: "'installed' in k3s_install_result.stdout or 'upgraded' in k3s_install_result.stdout"
+
+    - name: Wait for additional master to be ready
+      wait_for:
+        path: /var/lib/rancher/k3s/agent/kubelet.kubeconfig
+        state: present
+        timeout: 300
+
+  when: not (k3s_server_init | default(false) | bool)
+
+# Common tasks for all master nodes
 - name: Create .kube directory for user
   file:
     path: "/home/{{ ansible_user }}/.kube"
@@ -67,12 +107,13 @@
     regexp: '127.0.0.1'
     replace: "{{ ansible_host }}"
 
-- name: Fetch kubeconfig to local machine
+- name: Fetch kubeconfig from primary master only
   fetch:
     src: "/home/{{ ansible_user }}/.kube/config"
     dest: "{{ playbook_dir }}/kubeconfig"
     flat: yes
+  when: k3s_server_init | default(false) | bool
 
 - name: Display success message
   debug:
-    msg: "K3s server installed successfully. Kubeconfig saved to {{ playbook_dir }}/kubeconfig"
+    msg: "K3s server installed successfully on {{ inventory_hostname }}"
