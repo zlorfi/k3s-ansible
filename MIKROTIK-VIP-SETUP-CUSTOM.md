@@ -46,29 +46,13 @@ Your VIP will route traffic to the master node by default. Create NAT rules to h
 ### HTTP (Port 80)
 
 ```mikrotik
-/ip/firewall/nat/add \
-  chain=dstnat \
-  dst-address=192.168.30.100 \
-  dst-port=80 \
-  protocol=tcp \
-  action=dstnat \
-  to-addresses=192.168.30.101 \
-  to-ports=80 \
-  comment="K3s-VIP-HTTP"
+/ip/firewall/nat/add chain=dstnat dst-address=192.168.30.100 dst-port=80 protocol=tcp action=dstnat to-addresses=192.168.30.101 to-ports=80 comment="K3s-VIP-HTTP"
 ```
 
 ### HTTPS (Port 443)
 
 ```mikrotik
-/ip/firewall/nat/add \
-  chain=dstnat \
-  dst-address=192.168.30.100 \
-  dst-port=443 \
-  protocol=tcp \
-  action=dstnat \
-  to-addresses=192.168.30.101 \
-  to-ports=443 \
-  comment="K3s-VIP-HTTPS"
+/ip/firewall/nat/add chain=dstnat dst-address=192.168.30.100 dst-port=443 protocol=tcp action=dstnat to-addresses=192.168.30.101 to-ports=443 comment="K3s-VIP-HTTPS"
 ```
 
 ### Verify NAT Rules
