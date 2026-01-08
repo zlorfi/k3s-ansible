@@ -877,7 +877,7 @@ DNS clients will distribute requests across all nodes (round-robin).
 **Pros:** Load balanced, automatic failover
 **Cons:** Requires DNS server support for multiple A records
 
-#### Option C: Virtual IP (VIP) with Keepalived - Best of Both Worlds
+#### Option C: Virtual IP (VIP) - Best of Both Worlds
 
 If your DNS only allows one A record but you want redundancy:
 
@@ -885,10 +885,35 @@ If your DNS only allows one A record but you want redundancy:
 test.zlor.fi  A  192.168.30.100
 ```
 
-Set up a virtual IP that automatically floats between nodes. See "Virtual IP Setup" below for detailed instructions.
+Set up a virtual IP that automatically handles failover. You have two sub-options:
 
-**Pros:** Single DNS record, automatic failover, load balancing
-**Cons:** Requires additional setup with Keepalived
+##### Option C1: MikroTik VIP (Recommended if you have MikroTik router)
+
+Configure VIP directly on your MikroTik router. See [MIKROTIK-VIP-SETUP.md](MIKROTIK-VIP-SETUP.md) for detailed instructions.
+
+Pros:
+
+- Simple setup (5 minutes)
+- No additional software on cluster nodes
+- Hardware-based failover (more reliable)
+- Better performance
+
+##### Option C2: Keepalived (Software-based VIP)
+
+Configure floating IP using Keepalived on cluster nodes. See "Virtual IP Setup (Keepalived)" below for detailed instructions.
+
+Pros:
+
+- No router configuration needed
+- Portable across different networks
+- Works in cloud environments
+
+Cons:
+
+- Additional daemon on all nodes
+- More configuration needed
+
+Recommendation: If you have MikroTik, use Option C1 (MikroTik VIP). Otherwise, use Option C2 (Keepalived).
 
 ### Step 2: Configure Cluster Nodes for External DNS
 
@@ -1112,9 +1137,9 @@ spec:
 kubectl apply -f manifests/nginx-test-deployment.yaml
 ```
 
-## Virtual IP Setup (Option C)
+## Virtual IP Setup - Keepalived (Option C2)
 
-If your DNS server only allows a single A record but you want high availability across all nodes, use a Virtual IP (VIP) with Keepalived.
+If your DNS server only allows a single A record but you want high availability across all nodes, and you're not using MikroTik VIP, use a Virtual IP (VIP) with Keepalived.
 
 ### How It Works
 
