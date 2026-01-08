@@ -159,39 +159,72 @@ sudo journalctl -u telegraf -f
 
 Once configured, metrics will appear in your InfluxDB instance under the `rpi-cluster` bucket with tags for each node hostname and node type (master/worker).
 
-### Grafana Dashboard for Telegraf Metrics
+### Monitoring Dashboards
 
-A pre-built Grafana dashboard is included to visualize all collected metrics. The dashboard displays:
+Two pre-built dashboards are available for visualizing your cluster metrics:
+
+#### Grafana Dashboard
+
+A comprehensive Grafana dashboard with interactive visualizations:
 
 - CPU usage across all nodes
 - Memory usage (percentage)
 - CPU temperature (Raspberry Pi specific)
 - System load averages
-- Disk usage
-- Network traffic
 
-**Import the Dashboard:**
+**Import to Grafana:**
 
 1. Open Grafana and go to **Dashboards** → **New** → **Import**
 2. Upload the dashboard file: `grafana/rpi-cluster-dashboard.json`
-3. Select your InfluxDB datasource (must be named `influx`)
+3. Your InfluxDB datasource (named `influxdb`) will be automatically selected
 4. Click **Import**
 
-**Datasource Requirements:**
-
-The dashboard expects your InfluxDB datasource in Grafana to be named exactly `influx`. If your datasource has a different name, either:
-
-- Rename your datasource in Grafana settings, or
-- Edit the dashboard JSON and replace all `"uid": "influx"` references with your datasource name
-
-**Customize the Dashboard:**
+**Customize the Grafana Dashboard:**
 
 You can modify the dashboard after import to:
 
 - Adjust time ranges (default: last 6 hours)
 - Add alerts for high CPU/temperature/memory
-- Add more panels for network metrics
+- Add more panels for additional metrics
 - Create node-specific views using Grafana variables
+
+#### InfluxDB Dashboard
+
+A native InfluxDB 2.x dashboard with built-in gauges and time series:
+
+- CPU usage gauge (average)
+- Memory usage gauge (average)
+- CPU usage time series (6-hour view)
+- Memory usage time series (6-hour view)
+- CPU temperature trend
+- System load trend
+
+**Import to InfluxDB 2.8:**
+
+**Via UI (Recommended):**
+
+1. Open InfluxDB UI at `http://your-influxdb-host:8086`
+2. Go to **Dashboards** (left sidebar)
+3. Click **Create Dashboard** → **From a Template**
+4. Click **Paste JSON**
+5. Copy and paste the contents of `influxdb/rpi-cluster-dashboard-v2.json`
+6. Click **Create Dashboard**
+
+**Via CLI:**
+
+```bash
+influx dashboard import \
+  --org family \
+  --file influxdb/rpi-cluster-dashboard-v2.json
+```
+
+**Benefits of InfluxDB Dashboard:**
+
+- Native integration - no external datasource configuration needed
+- Built-in alert support
+- Real-time data without polling delays
+- Direct access to raw data and queries
+- InfluxDB 2.8 compatible
 
 ### Deploy K3s Cluster
 
@@ -468,6 +501,128 @@ kubectl delete -f manifests/nginx-test-deployment.yaml
 ```
 
 ## Maintenance
+
+### Updating the Cluster
+
+K3s updates are handled automatically through the system package manager. There are several ways to update your cluster:
+
+#### Option 1: Automatic Updates (Recommended)
+
+K3s can automatically update itself. To enable automatic updates on all nodes:
+
+1. Add the following to your inventory `hosts.ini`:
+
+```ini
+[k3s_cluster:vars]
+k3s_version=latest
+```
+
+1. Re-run the k3s installation playbook:
+
+```bash
+ansible-playbook site.yml --tags k3s-server,k3s-agent
+```
+
+K3s will then automatically apply updates when new versions are available (typically patched versions).
+
+#### Option 2: Manual Update to Specific Version
+
+To update to a specific k3s version:
+
+1. Update the `k3s_version` variable in `inventory/hosts.ini`:
+
+```ini
+[k3s_cluster:vars]
+k3s_version=v1.35.0+k3s1
+```
+
+1. Run the k3s playbook to update all nodes:
+
+```bash
+# Update master first (required to generate token for agents)
+ansible-playbook site.yml --tags k3s-server,k3s-agent
+```
+
+**Important:** Always update master nodes before workers. Workers need the token from the master to rejoin the cluster.
+
+#### Option 3: Update via K3s Release Script
+
+For more control, you can manually update k3s on individual nodes:
+
+```bash
+# SSH into a node
+ssh pi@<node-ip>
+
+# Download and install specific version
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.35.0+k3s1 sh -
+
+# Restart k3s
+sudo systemctl restart k3s        # On master
+sudo systemctl restart k3s-agent  # On workers
+```
+
+#### Checking Current K3s Version
+
+To see the current k3s version running on your cluster:
+
+```bash
+kubectl version --short
+# or
+kubectl get nodes -o wide
+```
+
+To check versions on specific nodes:
+
+```bash
+ssh pi@<node-ip>
+k3s --version
+
+# Or via Ansible
+ansible all -m shell -a "k3s --version" --become
+```
+
+#### Update Telegraf
+
+To update Telegraf metrics collection to the latest version:
+
+```bash
+# Update Telegraf on all nodes
+ansible-playbook telegraf.yml
+
+# Update only specific nodes
+ansible-playbook telegraf.yml --limit worker
+```
+
+#### Post-Update Verification
+
+After updating, verify your cluster is healthy:
+
+```bash
+# Check all nodes are ready
+kubectl get nodes
+
+# Check pod status
+kubectl get pods --all-namespaces
+
+# Check cluster info
+kubectl cluster-info
+
+# View recent events
+kubectl get events --all-namespaces --sort-by='.lastTimestamp'
+```
+
+#### Rollback (if needed)
+
+If an update causes issues, you can rollback to a previous version:
+
+```bash
+# Update inventory with previous version
+# [k3s_cluster:vars]
+# k3s_version=v1.34.2+k3s1
+
+# Re-run the playbook
+ansible-playbook site.yml --tags k3s-server,k3s-agent
+```
 
 ### Rebooting Cluster Nodes
 

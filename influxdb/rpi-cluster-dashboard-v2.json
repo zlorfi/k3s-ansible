@@ -1,0 +1,238 @@
+{
+  "name": "Raspberry Pi K3s Cluster Metrics",
+  "description": "System monitoring dashboard for Raspberry Pi K3s cluster with Telegraf metrics",
+  "cells": [
+    {
+      "x": 0,
+      "y": 0,
+      "w": 6,
+      "h": 4,
+      "kind": "Gauge",
+      "name": "CPU Usage - Average",
+      "properties": {
+        "queries": [
+          {
+            "text": "from(bucket: \"rpi-cluster\")\n  |> range(start: -15m)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"cpu\")\n  |> filter(fn: (r) => r[\"_field\"] == \"usage_user\")\n  |> mean()",
+            "editMode": "advanced"
+          }
+        ],
+        "colors": [
+          {
+            "id": "0",
+            "type": "background",
+            "hex": "#00C9FF",
+            "value": 0
+          },
+          {
+            "id": "1",
+            "type": "background",
+            "hex": "#FFB94E",
+            "value": 50
+          },
+          {
+            "id": "2",
+            "type": "background",
+            "hex": "#FF3D3D",
+            "value": 80
+          }
+        ],
+        "prefix": "",
+        "suffix": "%",
+        "decimalPlaces": 1,
+        "note": ""
+      }
+    },
+    {
+      "x": 6,
+      "y": 0,
+      "w": 6,
+      "h": 4,
+      "kind": "Gauge",
+      "name": "Memory Usage - Average",
+      "properties": {
+        "queries": [
+          {
+            "text": "from(bucket: \"rpi-cluster\")\n  |> range(start: -15m)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mem\")\n  |> filter(fn: (r) => r[\"_field\"] == \"used_percent\")\n  |> mean()",
+            "editMode": "advanced"
+          }
+        ],
+        "colors": [
+          {
+            "id": "0",
+            "type": "background",
+            "hex": "#00C9FF",
+            "value": 0
+          },
+          {
+            "id": "1",
+            "type": "background",
+            "hex": "#FFB94E",
+            "value": 60
+          },
+          {
+            "id": "2",
+            "type": "background",
+            "hex": "#FF3D3D",
+            "value": 85
+          }
+        ],
+        "prefix": "",
+        "suffix": "%",
+        "decimalPlaces": 1,
+        "note": ""
+      }
+    },
+    {
+      "x": 0,
+      "y": 4,
+      "w": 12,
+      "h": 4,
+      "kind": "TimeSeries",
+      "name": "CPU Usage - All Nodes",
+      "properties": {
+        "queries": [
+          {
+            "text": "from(bucket: \"rpi-cluster\")\n  |> range(start: -6h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"cpu\")\n  |> filter(fn: (r) => r[\"_field\"] == \"usage_user\")\n  |> aggregateWindow(every: 1m, fn: mean)",
+            "editMode": "advanced"
+          }
+        ],
+        "colors": [],
+        "axes": {
+          "x": {
+            "bounds": [],
+            "label": "",
+            "prefix": "",
+            "suffix": "",
+            "base": "10",
+            "scale": "linear"
+          },
+          "y": {
+            "bounds": [],
+            "label": "CPU Usage (%)",
+            "prefix": "",
+            "suffix": "",
+            "base": "10",
+            "scale": "linear"
+          }
+        },
+        "type": "xy",
+        "geom": "line",
+        "note": ""
+      }
+    },
+    {
+      "x": 0,
+      "y": 8,
+      "w": 12,
+      "h": 4,
+      "kind": "TimeSeries",
+      "name": "Memory Usage - All Nodes",
+      "properties": {
+        "queries": [
+          {
+            "text": "from(bucket: \"rpi-cluster\")\n  |> range(start: -6h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"mem\")\n  |> filter(fn: (r) => r[\"_field\"] == \"used_percent\")\n  |> aggregateWindow(every: 1m, fn: mean)",
+            "editMode": "advanced"
+          }
+        ],
+        "colors": [],
+        "axes": {
+          "x": {
+            "bounds": [],
+            "label": "",
+            "prefix": "",
+            "suffix": "",
+            "base": "10",
+            "scale": "linear"
+          },
+          "y": {
+            "bounds": [],
+            "label": "Memory (%)",
+            "prefix": "",
+            "suffix": "",
+            "base": "10",
+            "scale": "linear"
+          }
+        },
+        "type": "xy",
+        "geom": "line",
+        "note": ""
+      }
+    },
+    {
+      "x": 0,
+      "y": 12,
+      "w": 12,
+      "h": 4,
+      "kind": "TimeSeries",
+      "name": "CPU Temperature - All Nodes",
+      "properties": {
+        "queries": [
+          {
+            "text": "from(bucket: \"rpi-cluster\")\n  |> range(start: -6h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"cpu_temp_thermal\")\n  |> filter(fn: (r) => r[\"_field\"] == \"value\")\n  |> aggregateWindow(every: 1m, fn: mean)",
+            "editMode": "advanced"
+          }
+        ],
+        "colors": [],
+        "axes": {
+          "x": {
+            "bounds": [],
+            "label": "",
+            "prefix": "",
+            "suffix": "",
+            "base": "10",
+            "scale": "linear"
+          },
+          "y": {
+            "bounds": [],
+            "label": "Temperature (°C)",
+            "prefix": "",
+            "suffix": "",
+            "base": "10",
+            "scale": "linear"
+          }
+        },
+        "type": "xy",
+        "geom": "line",
+        "note": ""
+      }
+    },
+    {
+      "x": 0,
+      "y": 16,
+      "w": 12,
+      "h": 4,
+      "kind": "TimeSeries",
+      "name": "System Load - All Nodes",
+      "properties": {
+        "queries": [
+          {
+            "text": "from(bucket: \"rpi-cluster\")\n  |> range(start: -6h)\n  |> filter(fn: (r) => r[\"_measurement\"] == \"system\")\n  |> filter(fn: (r) => r[\"_field\"] == \"load1\")\n  |> aggregateWindow(every: 1m, fn: mean)",
+            "editMode": "advanced"
+          }
+        ],
+        "colors": [],
+        "axes": {
+          "x": {
+            "bounds": [],
+            "label": "",
+            "prefix": "",
+            "suffix": "",
+            "base": "10",
+            "scale": "linear"
+          },
+          "y": {
+            "bounds": [],
+            "label": "Load Average (1m)",
+            "prefix": "",
+            "suffix": "",
+            "base": "10",
+            "scale": "linear"
+          }
+        },
+        "type": "xy",
+        "geom": "line",
+        "note": ""
+      }
+    }
+  ]
+}

@@ -9,14 +9,14 @@
     url: https://get.k3s.io
     dest: /tmp/k3s-install.sh
     mode: '0755'
-  when: not k3s_binary.stat.exists
 
-- name: Install k3s server
+- name: Install or upgrade k3s server
   shell: |
     INSTALL_K3S_VERSION="{{ k3s_version }}" \
     INSTALL_K3S_EXEC="server {{ extra_server_args }}" \
     sh /tmp/k3s-install.sh
-  when: not k3s_binary.stat.exists
+  register: k3s_install_result
+  changed_when: "'installed' in k3s_install_result.stdout or 'upgraded' in k3s_install_result.stdout"
 
 - name: Wait for k3s to be ready
   wait_for:

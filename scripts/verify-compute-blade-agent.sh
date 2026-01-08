@@ -16,12 +16,12 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║  Compute Blade Agent Verification Script                      ║${NC}"
+echo -e "${BLUE}║  Compute Blade Agent Verification Script                       ║${NC}"
 echo -e "${BLUE}╚════════════════════════════════════════════════════════════════╝${NC}\n"
 
 # Parse worker nodes from inventory
 echo -e "${YELLOW}Parsing worker nodes from inventory...${NC}"
-WORKERS=$(grep -E "^cb-0[2-9]|^pi-worker" "$INVENTORY" | awk '{print $1}')
+WORKERS=$(grep -E "^\[worker\]" -A 100 "$INVENTORY" | grep -E "^cm4-|^pi-worker|^cb-0" | grep -v "^\[" | awk '{print $1}')
 
 if [ -z "$WORKERS" ]; then
     echo -e "${RED}No worker nodes found in inventory${NC}"
