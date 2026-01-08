@@ -31,13 +31,19 @@ Since your K3s nodes are on the `br-lab` bridge, add the VIP there:
 ### Verify VIP is Added
 
 ```mikrotik
-/ip/address/print detail where comment~"K3s"
+/ip address print detail where comment~"K3s"
 ```
 
 You should see:
 ```
 0   address=192.168.30.100/24 interface=br-lab disabled=no comment="K3s-Cluster-VIP"
 ```
+
+**Important Syntax Notes:**
+
+- Use `/ip address` (space) instead of `/ip/address/` (slashes)
+- Use `action=dst-nat` (with hyphen) instead of `action=dstnat`
+- The command path uses spaces: `/ip firewall nat` instead of `/ip/firewall/nat/`
 
 ## Step 2: Create NAT Rules for Traffic Routing
 
@@ -46,28 +52,64 @@ Your VIP will route traffic to the master node by default. Create NAT rules to h
 ### HTTP (Port 80)
 
 ```mikrotik
-/ip/firewall/nat/add chain=dstnat dst-address=192.168.30.100 dst-port=80 protocol=tcp action=dstnat to-addresses=192.168.30.101 to-ports=80 comment="K3s-VIP-HTTP"
+/ip firewall nat add chain=dstnat dst-address=192.168.30.100 dst-port=80 protocol=tcp action=dst-nat to-addresses=192.168.30.101 to-ports=80 comment="K3s-VIP-HTTP"
 ```
 
 ### HTTPS (Port 443)
 
 ```mikrotik
-/ip/firewall/nat/add chain=dstnat dst-address=192.168.30.100 dst-port=443 protocol=tcp action=dstnat to-addresses=192.168.30.101 to-ports=443 comment="K3s-VIP-HTTPS"
+/ip firewall nat add chain=dstnat dst-address=192.168.30.100 dst-port=443 protocol=tcp action=dst-nat to-addresses=192.168.30.101 to-ports=443 comment="K3s-VIP-HTTPS"
 ```
 
 ### Verify NAT Rules
 
 ```mikrotik
-/ip/firewall/nat/print detail where comment~"K3s-VIP"
+/ip firewall nat print detail where comment~"K3s-VIP"
 ```
+
+### Alternative: Configure NAT Rules via Web Interface
+
+If you experience CLI syntax issues, use the MikroTik WebFig interface instead:
+
+1. **Access MikroTik WebFig**
+   - Open `http://<router-ip>` in your browser
+   - Login with your admin credentials
+
+2. **Navigate to NAT Rules**
+   - Go to: **IP** → **Firewall** → **NAT**
+
+3. **Add HTTP NAT Rule**
+   - Click **+ New**
+   - Set:
+     - **Chain**: `dstnat`
+     - **Dst. Address**: `192.168.30.100`
+     - **Dst. Port**: `80`
+     - **Protocol**: `tcp`
+     - **Action**: `dst-nat`
+     - **To Addresses**: `192.168.30.101`
+     - **To Ports**: `80`
+     - **Comment**: `K3s-VIP-HTTP`
+   - Click **OK**
+
+4. **Add HTTPS NAT Rule**
+   - Click **+ New**
+   - Set:
+     - **Chain**: `dstnat`
+     - **Dst. Address**: `192.168.30.100`
+     - **Dst. Port**: `443`
+     - **Protocol**: `tcp`
+     - **Action**: `dst-nat`
+     - **To Addresses**: `192.168.30.101`
+     - **To Ports**: `443`
+     - **Comment**: `K3s-VIP-HTTPS`
+   - Click **OK**
 
 ## Step 3: Add Static Routes (Optional but Recommended)
 
 Ensure the K3s cluster nodes can reach each other through br-lab:
 
 ```mikrotik
-/ip/route/add dst-address=192.168.30.0/24 gateway=192.168.30.1 \
-  comment="K3s-Cluster-Network"
+/ip route add dst-address=192.168.30.0/24 gateway=192.168.30.1 comment="K3s-Cluster-Network"
 ```
 
 ## Step 4: Configure Firewall Rules
@@ -77,25 +119,13 @@ Make sure your firewall allows traffic on ports 80 and 443 to the VIP:
 ### Allow Ingress to VIP on Port 80
 
 ```mikrotik
-/ip/firewall/filter/add \
-  chain=forward \
-  dst-address=192.168.30.100 \
-  dst-port=80 \
-  protocol=tcp \
-  action=accept \
-  comment="Allow-HTTP-to-VIP"
+/ip firewall filter add chain=forward dst-address=192.168.30.100 dst-port=80 protocol=tcp action=accept comment="Allow-HTTP-to-VIP"
 ```
 
 ### Allow Ingress to VIP on Port 443
 
 ```mikrotik
-/ip/firewall/filter/add \
-  chain=forward \
-  dst-address=192.168.30.100 \
-  dst-port=443 \
-  protocol=tcp \
-  action=accept \
-  comment="Allow-HTTPS-to-VIP"
+/ip firewall filter add chain=forward dst-address=192.168.30.100 dst-port=443 protocol=tcp action=accept comment="Allow-HTTPS-to-VIP"
 ```
 
 ## Step 5: Test the VIP
@@ -103,7 +133,7 @@ Make sure your firewall allows traffic on ports 80 and 443 to the VIP:
 ### Test from MikroTik Router
 
 ```mikrotik
-/tool/ping 192.168.30.100 count=5
+/tool ping 192.168.30.100 count=5
 ```
 
 Expected output: All 5 pings should succeed
@@ -296,20 +326,20 @@ If you want to run all commands in one go, here's the complete sequence:
 
 ```mikrotik
 # Add VIP address
-/ip/address/add address=192.168.30.100/24 interface=br-lab comment="K3s-Cluster-VIP"
+/ip address add address=192.168.30.100/24 interface=br-lab comment="K3s-Cluster-VIP"
 
 # Add HTTP NAT rule
-/ip/firewall/nat/add chain=dstnat dst-address=192.168.30.100 dst-port=80 protocol=tcp action=dstnat to-addresses=192.168.30.101 to-ports=80 comment="K3s-VIP-HTTP"
+/ip firewall nat add chain=dstnat dst-address=192.168.30.100 dst-port=80 protocol=tcp action=dst-nat to-addresses=192.168.30.101 to-ports=80 comment="K3s-VIP-HTTP"
 
 # Add HTTPS NAT rule
-/ip/firewall/nat/add chain=dstnat dst-address=192.168.30.100 dst-port=443 protocol=tcp action=dstnat to-addresses=192.168.30.101 to-ports=443 comment="K3s-VIP-HTTPS"
+/ip firewall nat add chain=dstnat dst-address=192.168.30.100 dst-port=443 protocol=tcp action=dst-nat to-addresses=192.168.30.101 to-ports=443 comment="K3s-VIP-HTTPS"
 
 # Add static route
-/ip/route/add dst-address=192.168.30.0/24 gateway=192.168.30.1 comment="K3s-Cluster-Network"
+/ip route add dst-address=192.168.30.0/24 gateway=192.168.30.1 comment="K3s-Cluster-Network"
 
 # Verify
-/ip/address/print detail
-/ip/firewall/nat/print detail where comment~"K3s"
+/ip address print detail
+/ip firewall nat print detail where comment~"K3s"
 ```
 
 ## Remove VIP (If Needed)
