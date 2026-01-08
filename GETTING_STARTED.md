@@ -18,9 +18,9 @@ cat inventory/hosts.ini
 
 Verify:
 
-- Master node IP is correct (cm4-01)
-- Worker node IPs are correct (cm4-02, cm4-03, cm4-04)
-- `enable_compute_blade_agent=true` is set
+- Master nodes are correct (cm4-01, cm4-02, cm4-03)
+- Worker node IP is correct (cm4-04)
+- `enable_compute_blade_agent=true` is set (optional for masters)
 
 ### Step 2: Test Connectivity
 
@@ -46,17 +46,22 @@ This will:
 
 **Total time**: ~30-45 minutes
 
-### Step 4: Verify
+### Step 4: Verify Cluster
 
 ```bash
-bash scripts/verify-compute-blade-agent.sh
+export KUBECONFIG=$(pwd)/kubeconfig
+kubectl get nodes
 ```
 
-All workers should show:
+You should see all 4 nodes ready (3 masters + 1 worker):
 
-- ✓ Network: Reachable
-- ✓ Service Status: Running
-- ✓ Binary: Installed
+```bash
+NAME     STATUS   ROLES                       AGE   VERSION
+cm4-01   Ready    control-plane,etcd,master   5m    v1.35.0+k3s1
+cm4-02   Ready    control-plane,etcd          3m    v1.35.0+k3s1
+cm4-03   Ready    control-plane,etcd          3m    v1.35.0+k3s1
+cm4-04   Ready    <none>                      3m    v1.35.0+k3s1
+```
 
 ## Configuration
 
@@ -215,22 +220,31 @@ sudo systemctl status compute-blade-agent
 
 ## Common Tasks
 
-### Restart Agent on All Workers
+### Check Cluster Status
 
 ```bash
-ansible worker -m shell -a "sudo systemctl restart compute-blade-agent" --become
+export KUBECONFIG=$(pwd)/kubeconfig
+kubectl get nodes
+kubectl get pods --all-namespaces
 ```
 
-### View Agent Logs on All Workers
+### Access Any Master Node
 
 ```bash
-ansible worker -m shell -a "sudo journalctl -u compute-blade-agent -n 20" --become
+# Access cm4-01
+ssh pi@192.168.30.101
+
+# Or access cm4-02 (backup master)
+ssh pi@192.168.30.102
+
+# Or access cm4-03 (backup master)
+ssh pi@192.168.30.103
 ```
 
 ### Deploy Only to Specific Nodes
 
 ```bash
-ansible-playbook site.yml --tags compute-blade-agent --limit cm4-02,cm4-03
+ansible-playbook site.yml --tags compute-blade-agent --limit cm4-04
 ```
 
 ### Disable Agent for Next Deployment
@@ -257,12 +271,12 @@ ansible worker -m shell -a "bash /usr/local/bin/k3s-uninstall-compute-blade-agen
 ansible all -m shell -a "bash /usr/local/bin/k3s-uninstall.sh" --become
 ```
 
-## Support
+## Documentation
 
-- **Quick Reference**: `cat COMPUTE_BLADE_AGENT.md`
-- **Checklist**: `cat DEPLOYMENT_CHECKLIST.md`
-- **Full Guide**: `cat README.md`
-- **GitHub**: [compute-blade-agent](https://github.com/compute-blade-community/compute-blade-agent)
+- **README.md** - Full guide with all configuration options
+- **DEPLOYMENT_CHECKLIST.md** - Step-by-step checklist
+- **COMPUTE_BLADE_AGENT.md** - Quick reference for agent deployment
+- **MIKROTIK-VIP-SETUP-CUSTOM.md** - Virtual IP failover configuration
 
 ## File Locations
 

@@ -42,19 +42,19 @@ Edit `inventory/hosts.ini` and add your Raspberry Pi nodes:
 
 ```ini
 [master]
-pi-master ansible_host=192.168.30.100 ansible_user=pi
+cm4-01 ansible_host=192.168.30.101 ansible_user=pi k3s_server_init=true
+cm4-02 ansible_host=192.168.30.102 ansible_user=pi k3s_server_init=false
+cm4-03 ansible_host=192.168.30.103 ansible_user=pi k3s_server_init=false
 
 [worker]
-pi-worker-1 ansible_host=192.168.30.102 ansible_user=pi
-pi-worker-2 ansible_host=192.168.30.103 ansible_user=pi
-pi-worker-3 ansible_host=192.168.30.104 ansible_user=pi
+cm4-04 ansible_host=192.168.30.104 ansible_user=pi
 ```
 
 ### 2. Configure Variables
 
 In `inventory/hosts.ini`, you can customize:
 
-- `k3s_version`: K3s version to install (default: v1.34.2+k3s1)
+- `k3s_version`: K3s version to install (default: v1.35.0+k3s1)
 - `extra_server_args`: Additional arguments for k3s server
 - `extra_agent_args`: Additional arguments for k3s agent
 - `extra_packages`: List of additional packages to install on all nodes
@@ -304,20 +304,21 @@ kubectl get nodes
 You should see all your nodes in Ready state:
 
 ```bash
-NAME          STATUS   ROLES                  AGE   VERSION
-pi-master     Ready    control-plane,master   5m    v1.34.2+k3s1
-pi-worker-1   Ready    <none>                 3m    v1.34.2+k3s1
-pi-worker-2   Ready    <none>                 3m    v1.34.2+k3s1
+NAME     STATUS   ROLES                       AGE   VERSION
+cm4-01   Ready    control-plane,etcd,master   5m    v1.35.0+k3s1
+cm4-02   Ready    control-plane,etcd          3m    v1.35.0+k3s1
+cm4-03   Ready    control-plane,etcd          3m    v1.35.0+k3s1
+cm4-04   Ready    <none>                      3m    v1.35.0+k3s1
 ```
 
 ## Accessing the Cluster
 
 ### From Master Node
 
-SSH into the master node and use kubectl:
+SSH into a master node and use kubectl:
 
 ```bash
-ssh pi@pi-master
+ssh pi@192.168.30.101
 kubectl get nodes
 ```
 
@@ -461,8 +462,11 @@ nginx-test-7d8f4c9b6d-xr5wp   1/1     Running   0          1m    pi-worker-2
 Add your master node IP to /etc/hosts:
 
 ```bash
-# Replace 192.168.30.101 with your master node IP
+# Replace with any master or worker node IP
 192.168.30.101  nginx-test.local nginx.pi.local
+192.168.30.102  nginx-test.local nginx.pi.local
+192.168.30.103  nginx-test.local nginx.pi.local
+192.168.30.104  nginx-test.local nginx.pi.local
 ```
 
 Then access via browser:
@@ -473,8 +477,9 @@ Then access via browser:
 Or test with curl:
 
 ```bash
-# Replace with your master node IP
+# Test with any cluster node IP (master or worker)
 curl -H "Host: nginx-test.local" http://192.168.30.101
+curl -H "Host: nginx-test.local" http://192.168.30.102
 ```
 
 ### Scale the Deployment
@@ -624,7 +629,7 @@ ansible-playbook site.yml --tags k3s-server --limit <failed-master>
 
 ### Demoting a Master to Worker
 
-To remove a master from control-plane and make it a worker:
+To remove a master from control-plane and make it a worker (note: this reduces HA from 3-node to 2-node):
 
 1. Edit `inventory/hosts.ini`:
 
@@ -637,6 +642,8 @@ To remove a master from control-plane and make it a worker:
    cm4-03 ansible_host=192.168.30.103 ansible_user=pi
    cm4-04 ansible_host=192.168.30.104 ansible_user=pi
    ```
+
+   **Warning**: This reduces your cluster to 2 master nodes. With only 2 masters, you lose quorum (require 2/3, have only 1/2 if one fails).
 
 2. Drain the node:
 
@@ -690,7 +697,7 @@ To update to a specific k3s version:
 
 ```ini
 [k3s_cluster:vars]
-k3s_version=v1.35.0+k3s1
+k3s_version=v1.36.0+k3s1
 ```
 
 1. Run the k3s playbook to update all nodes:
@@ -711,7 +718,7 @@ For more control, you can manually update k3s on individual nodes:
 ssh pi@<node-ip>
 
 # Download and install specific version
-curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.35.0+k3s1 sh -
+curl -sfL https://get.k3s.io | INSTALL_K3S_VERSION=v1.36.0+k3s1 sh -
 
 # Restart k3s
 sudo systemctl restart k3s        # On master
@@ -775,7 +782,7 @@ If an update causes issues, you can rollback to a previous version:
 ```bash
 # Update inventory with previous version
 # [k3s_cluster:vars]
-# k3s_version=v1.34.2+k3s1
+# k3s_version=v1.35.0+k3s1
 
 # Re-run the playbook
 ansible-playbook site.yml --tags k3s-server,k3s-agent
@@ -814,7 +821,7 @@ ansible-playbook reboot.yml --limit master
 ### Reboot a Specific Node
 
 ```bash
-ansible-playbook reboot.yml --limit pi-worker-1
+ansible-playbook reboot.yml --limit cm4-04
 ```
 
 ## Troubleshooting
@@ -1001,26 +1008,33 @@ ansible-playbook site.yml --tags compute-blade-agent
 
 ## External DNS Configuration
 
-To use external domains (like `test.zlor.fi`) with your k3s cluster ingress, you need to configure DNS and update your nodes.
+To use external domains (like `test.zlor.fi`) with your k3s cluster ingress, you need to configure DNS. Your cluster uses a Virtual IP (192.168.30.100) via MikroTik for high availability.
 
 ### Step 1: Configure DNS Server Records
 
 On your DNS server, add **A records** pointing to your k3s cluster nodes:
 
-#### Option A: Single Record (Master Node Only) - Simplest
+#### Option A: Virtual IP (VIP) via MikroTik - Recommended for HA
 
-If your DNS only allows one A record:
+Use your MikroTik router's Virtual IP (192.168.30.100) for high availability:
 
 ```dns
-test.zlor.fi  A  192.168.30.101
+test.zlor.fi  A  192.168.30.100
 ```
 
-**Pros:** Simple, works with any DNS server
-**Cons:** No failover if master node is down
+**Pros:**
 
-#### Option B: Multiple Records (Load Balanced) - Best Redundancy
+- Single IP for entire cluster
+- Hardware-based failover (more reliable)
+- Better performance
+- No additional software needed
+- Automatically routes to available masters
 
-If your DNS supports multiple A records:
+See [MIKROTIK-VIP-SETUP-CUSTOM.md](MIKROTIK-VIP-SETUP-CUSTOM.md) for detailed setup instructions.
+
+#### Option B: Multiple Records (Load Balanced)
+
+If your DNS supports multiple A records, point to all cluster nodes:
 
 ```dns
 test.zlor.fi  A  192.168.30.101
@@ -1029,32 +1043,19 @@ test.zlor.fi  A  192.168.30.103
 test.zlor.fi  A  192.168.30.104
 ```
 
-DNS clients will distribute requests across all nodes (round-robin).
-
 **Pros:** Load balanced, automatic failover
 **Cons:** Requires DNS server support for multiple A records
 
-#### Option C: Virtual IP (VIP) - Best of Both Worlds
+#### Option C: Single Master Node (No Failover)
 
-If your DNS only allows one A record but you want redundancy:
+For simple setups without redundancy:
 
 ```dns
-test.zlor.fi  A  192.168.30.100
+test.zlor.fi  A  192.168.30.101
 ```
 
-Set up a virtual IP that automatically handles failover. You have two sub-options:
-
-##### Option C: MikroTik VIP (Recommended)
-
-Configure VIP directly on your MikroTik router. See [MIKROTIK-VIP-SETUP.md](MIKROTIK-VIP-SETUP.md) for customized setup instructions for your network topology.
-
-Pros:
-
-- Simple setup (5 minutes)
-- No additional software on cluster nodes
-- Hardware-based failover (more reliable)
-- Better performance
-- Reduced CPU overhead on nodes
+**Pros:** Simple, works with any DNS server
+**Cons:** No failover if that node is down (not recommended for HA clusters)
 
 ### Step 2: Configure Cluster Nodes for External DNS
 

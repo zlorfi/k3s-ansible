@@ -68,36 +68,36 @@ bash scripts/verify-compute-blade-agent.sh
 - [ ] Service status shows "Running"
 - [ ] Config file exists at `/etc/compute-blade-agent/config.yaml`
 
-### 3. Manual Verification on a Worker
+### 3. Manual Verification on a Master Node
 
 ```bash
-ssh pi@192.168.30.102
-sudo systemctl status compute-blade-agent
+# Connect to any master (cm4-01, cm4-02, or cm4-03)
+ssh pi@192.168.30.101
+kubectl get nodes
 ```
 
-- [ ] Service is active (running)
-- [ ] Service is enabled (will start on boot)
+- [ ] All 3 masters show as "Ready"
+- [ ] Worker node (cm4-04) shows as "Ready"
 
-### 4. Check Logs
+### 4. Check Etcd Quorum
 
 ```bash
-ssh pi@192.168.30.102
-sudo journalctl -u compute-blade-agent -n 50
+ssh pi@192.168.30.101
+sudo /var/lib/rancher/k3s/data/*/bin/etcdctl member list
 ```
 
-- [ ] No error messages
-- [ ] Service started successfully
-- [ ] Hardware detection messages present (if applicable)
+- [ ] All 3 etcd members show as active
+- [ ] Cluster has quorum (2/3 minimum for failover)
 
-### 5. Verify Installation
+### 5. Verify Kubeconfig
 
 ```bash
-ssh pi@192.168.30.102
-/usr/local/bin/compute-blade-agent --version
+export KUBECONFIG=$(pwd)/kubeconfig
+kubectl config get-contexts
 ```
 
-- [ ] Binary responds with version information
-- [ ] bladectl CLI tool is available
+- [ ] Shows contexts: cm4-01, cm4-02, cm4-03, and default
+- [ ] All contexts point to correct control-plane nodes
 
 ## Optional: Kubernetes Monitoring Setup
 
@@ -159,15 +159,20 @@ enable_compute_blade_agent=true  # or false
 
 ### Per-Node Configuration
 
-To enable/disable specific nodes, edit `inventory/hosts.ini`:
+Note: cm4-02 and cm4-03 are now **master nodes**, not workers. To enable/disable compute-blade-agent on specific nodes:
 
 ```ini
+[master]
+cm4-01 ansible_host=192.168.30.101 ansible_user=pi k3s_server_init=true enable_compute_blade_agent=false
+cm4-02 ansible_host=192.168.30.102 ansible_user=pi k3s_server_init=false enable_compute_blade_agent=false
+cm4-03 ansible_host=192.168.30.103 ansible_user=pi k3s_server_init=false enable_compute_blade_agent=false
+
 [worker]
-cm4-02 ansible_host=... enable_compute_blade_agent=false
-cm4-03 ansible_host=... enable_compute_blade_agent=true
+cm4-04 ansible_host=192.168.30.104 ansible_user=pi enable_compute_blade_agent=true
 ```
 
 - [ ] Per-node settings configured as needed
+- [ ] Master nodes typically don't need compute-blade-agent
 - [ ] Saved inventory file
 - [ ] Re-run playbook if changes made
 
@@ -214,26 +219,36 @@ ansible worker -m shell -a "systemctl status compute-blade-agent" --become
 
 - [ ] All workers show active status
 
+## HA Cluster Maintenance
+
+### Testing Failover
+
+Your 3-node HA cluster can handle one master going down (maintains 2/3 quorum):
+
+```bash
+# Reboot one master while monitoring cluster
+ssh pi@192.168.30.101
+sudo reboot
+
+# From another terminal, watch cluster status
+watch kubectl get nodes
+```
+
+- [ ] Cluster remains operational with 2/3 masters
+- [ ] Pods continue running
+- [ ] Can still kubectl from cm4-02 or cm4-03 context
+
 ## Uninstall (if needed)
 
-### Uninstall from Single Node
+### Uninstall K3s from All Nodes
 
 ```bash
-ssh pi@<worker-ip>
-sudo bash /usr/local/bin/k3s-uninstall-compute-blade-agent.sh
+ansible all -m shell -a "bash /usr/local/bin/k3s-uninstall.sh" --become
+ansible worker -m shell -a "bash /usr/local/bin/k3s-agent-uninstall.sh" --become
 ```
 
-- [ ] Uninstall script executed
-- [ ] Service removed
-- [ ] Configuration cleaned up
-
-### Uninstall from All Workers
-
-```bash
-ansible worker -m shell -a "bash /usr/local/bin/k3s-uninstall-compute-blade-agent.sh" --become
-```
-
-- [ ] All workers uninstalled
+- [ ] All K3s services stopped
+- [ ] Cluster data cleaned up
 
 ### Disable in Future Deployments
 

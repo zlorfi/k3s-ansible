@@ -8,15 +8,17 @@ Customized setup guide for your MikroTik RouterOS configuration.
 Uplink Network:     192.168.1.0/24  (br-uplink - WAN/External)
 LAB Network:        192.168.30.0/24 (br-lab - K3s Cluster)
 
-K3s Nodes:
-  cm4-01: 192.168.30.101 (Master)
-  cm4-02: 192.168.30.102 (Worker)
-  cm4-03: 192.168.30.103 (Worker)
+K3s Nodes (3-node HA Cluster):
+  cm4-01: 192.168.30.101 (Master/Control-Plane)
+  cm4-02: 192.168.30.102 (Master/Control-Plane)
+  cm4-03: 192.168.30.103 (Master/Control-Plane)
   cm4-04: 192.168.30.104 (Worker)
 
 Virtual IP to Create:
-  192.168.30.100/24 (on br-lab bridge)
+  192.168.30.100/24 (on br-lab bridge - HAProxy or MikroTik failover)
 ```
+
+**⚠️ Important Note**: The basic NAT rules below will route to cm4-01 only. To achieve true failover in your 3-node HA cluster, activate the health check script (Step 8) so traffic automatically routes to another master if cm4-01 goes down.
 
 ## Step 1: Add Virtual IP Address on MikroTik
 
@@ -183,9 +185,9 @@ curl http://test.zlor.fi
 curl -k https://test.zlor.fi
 ```
 
-## Step 8: Optional - Add Health Check Script
+## Step 8: Add Health Check Script (Recommended for HA)
 
-For automatic failover, create a health check script that monitors the master node and updates NAT rules if it goes down.
+**For automatic failover with your 3-node HA cluster**, create a health check script that monitors the master node and updates NAT rules if it goes down. This ensures traffic automatically routes to cm4-02 or cm4-03 if cm4-01 fails.
 
 ### Create Health Check Script
 
@@ -237,6 +239,8 @@ For automatic failover, create a health check script that monitors the master no
   comment="Monitor K3s cluster and update VIP routes"
 ```
 
+**Status**: This scheduler will run every 30 seconds and automatically switch the VIP NAT rules to an available master if cm4-01 becomes unreachable.
+
 ### View Health Check Logs
 
 ```mikrotik
@@ -247,14 +251,33 @@ For automatic failover, create a health check script that monitors the master no
 ## Verification Checklist
 
 - [ ] VIP address (192.168.30.100) added to br-lab
-- [ ] NAT rules for port 80 and 443 created
+- [ ] NAT rules for port 80 and 443 created (routed to cm4-01)
 - [ ] Firewall rules allow traffic to VIP
 - [ ] Ping 192.168.30.100 succeeds
 - [ ] curl http://192.168.30.100 returns nginx page
 - [ ] DNS A record added: test.zlor.fi → 192.168.30.100
 - [ ] curl http://test.zlor.fi works
-- [ ] Health check script created (optional)
-- [ ] Health check scheduled (optional)
+- [ ] **Health check script created** (recommended for HA failover)
+- [ ] **Health check scheduled** (recommended for HA failover)
+- [ ] Test failover by pinging health check scheduler status
+
+## Testing Failover (HA Cluster)
+
+If you've enabled the health check script, you can test automatic failover:
+
+```bash
+# From your machine, start monitoring
+watch -n 5 'curl -v http://192.168.30.100 2>&1 | grep "200 OK\|Connected"'
+
+# In another terminal, SSH to cm4-01 and reboot it
+ssh pi@192.168.30.101
+sudo reboot
+
+# Watch the curl output - after ~30 seconds, it should reconnect
+# This means the health check script switched traffic to cm4-02 or cm4-03
+```
+
+**Expected result**: Traffic stays online during the reboot (except for ~30 second switchover window)
 
 ## Troubleshooting
 
@@ -368,16 +391,27 @@ Your VIP is now configured on MikroTik:
 ```
 External Traffic
     ↓
-192.168.30.100:80 (VIP on br-lab)
+192.168.30.100:80/443 (VIP on br-lab)
     ↓
-NAT Rule Routes to 192.168.30.101:80
+NAT Rule Routes to 192.168.30.101:80/443 (cm4-01 Master)
     ↓
-K3s Master Node (cm4-01)
+If Health Check Enabled:
+  - Routes to cm4-02 if cm4-01 down (every 30 seconds check)
+  - Routes to cm4-03 if both cm4-01 and cm4-02 down
     ↓
-If Master Down → Failover to Worker
-    (Optional with health check script)
+Ingress → K3s Service → Pods
 ```
 
-DNS: `test.zlor.fi → 192.168.30.100`
+**DNS**: `test.zlor.fi → 192.168.30.100`
 
-Single IP for your entire cluster with automatic failover! ✅
+**Status**:
+
+- ✅ Single IP for entire cluster
+- ✅ Automatic failover (with health check script)
+- ✅ 3-node HA masters provide etcd quorum
+
+**Next Steps**:
+
+1. Enable health check script (Step 8) for automatic failover
+2. Test failover by rebooting cm4-01 and monitoring connectivity
+3. Your cluster now has true high availability!
