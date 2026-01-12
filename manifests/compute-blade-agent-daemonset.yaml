@@ -100,19 +100,19 @@ spec:
 ---
 # Optional ServiceMonitor for Prometheus (requires prometheus-operator)
 # Uncomment this section if you have Prometheus installed with the operator
-#
-# apiVersion: monitoring.coreos.com/v1
-# kind: ServiceMonitor
-# metadata:
-#   name: compute-blade-agent
-#   namespace: compute-blade-agent
-#   labels:
-#     app: compute-blade-agent
-# spec:
-#   selector:
-#     matchLabels:
-#       app: compute-blade-agent
-#   endpoints:
-#     - port: metrics
-#       interval: 30s
-#       path: /metrics
+
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: compute-blade-agent
+  namespace: compute-blade-agent
+  labels:
+    app: compute-blade-agent
+spec:
+  selector:
+    matchLabels:
+      app: compute-blade-agent
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics

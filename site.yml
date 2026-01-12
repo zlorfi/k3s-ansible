@@ -40,7 +40,7 @@
     - agent
     - worker
 
-- name: Install compute-blade-agent on workers
+- name: Install compute-blade-agent on all nodes
   hosts: all
   become: true
   roles:
@@ -48,6 +48,16 @@
   tags:
     - compute-blade-agent
     - blade-agent
+
+- name: Install Prometheus Operator
+  hosts: "{{ groups['master'][0] }}"
+  gather_facts: false
+  become: false
+  roles:
+    - role: prometheus-operator
+  tags:
+    - prometheus-operator
+    - monitoring
 
 - name: Deploy test applications
   hosts: "{{ groups['master'][0] }}"

@@ -1,0 +1,68 @@
+---
+# Prometheus Operator configuration defaults
+
+# Enable/disable Prometheus Operator installation
+enable_prometheus_operator: true
+
+# Grafana admin password (change in production!)
+grafana_admin_password: "admin"
+
+# Kubeconfig path for kubectl access
+kubeconfig_path: "/etc/rancher/k3s/k3s.yaml"
+
+# Prometheus configuration
+prometheus_retention_days: 7
+prometheus_storage_size: "10Gi"
+
+# Grafana configuration
+grafana_storage_size: "5Gi"
+grafana_admin_user: "admin"
+
+# AlertManager configuration
+alertmanager_storage_size: "5Gi"
+
+# Node selector for Prometheus components (optional)
+# Set to restrict Prometheus to specific nodes
+prometheus_node_selector: {}
+# Example:
+# prometheus_node_selector:
+#   node-type: monitoring
+
+# Resource requests and limits
+prometheus_cpu_request: "250m"
+prometheus_cpu_limit: "500m"
+prometheus_memory_request: "512Mi"
+prometheus_memory_limit: "1Gi"
+
+grafana_cpu_request: "100m"
+grafana_cpu_limit: "200m"
+grafana_memory_request: "256Mi"
+grafana_memory_limit: "512Mi"
+
+alertmanager_cpu_request: "100m"
+alertmanager_cpu_limit: "200m"
+alertmanager_memory_request: "256Mi"
+alertmanager_memory_limit: "512Mi"
+
+# Scrape interval configuration
+prometheus_scrape_interval: "30s"
+prometheus_scrape_timeout: "10s"
+prometheus_evaluation_interval: "30s"
+
+# Service Monitor label selector
+prometheus_service_monitor_selector: {}
+prometheus_pod_monitor_selector: {}
+
+# Enable/disable components
+enable_grafana: true
+enable_alertmanager: true
+enable_prometheus_node_exporter: true
+enable_kube_state_metrics: true
+
+# Helm values for fine-tuning
+prometheus_helm_values: {}
+# Example:
+# prometheus_helm_values:
+#   prometheus:
+#     prometheusSpec:
+#       retention: "15d"

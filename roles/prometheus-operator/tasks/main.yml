@@ -1,0 +1,140 @@
+---
+- name: Skip Prometheus Operator installation if disabled
+  debug:
+    msg: 'Prometheus Operator installation is disabled for this cluster'
+  when: not enable_prometheus_operator | bool
+
+- name: Block for Prometheus Operator installation
+  block:
+    - name: Check if Helm is installed locally
+      shell: which helm
+      register: helm_check
+      changed_when: false
+      failed_when: false
+      delegate_to: localhost
+      become: false
+
+    - name: Install Helm if not found
+      shell: |
+        curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      when: helm_check.rc != 0
+      delegate_to: localhost
+      become: false
+      changed_when: true
+
+    - name: Add Prometheus Helm repository
+      kubernetes.core.helm_repository:
+        name: prometheus-community
+        repo_url: https://prometheus-community.github.io/helm-charts
+        state: present
+      delegate_to: localhost
+      become: false
+
+    - name: Update Helm repositories
+      shell: helm repo update
+      changed_when: true
+      delegate_to: localhost
+      become: false
+
+    - name: Create monitoring namespace
+      shell: kubectl create namespace monitoring --kubeconfig={{ playbook_dir }}/kubeconfig 2>/dev/null || true
+      changed_when: false
+      delegate_to: localhost
+      become: false
+
+    - name: Install Prometheus Operator via Helm
+      shell: |
+        helm upgrade --install prometheus prometheus-community/kube-prometheus-stack \
+          --namespace monitoring \
+          --create-namespace \
+          --set prometheus.prometheusSpec.retention={{ prometheus_retention_days }}d \
+          --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.accessModes[0]=ReadWriteOnce \
+          --set prometheus.prometheusSpec.storageSpec.volumeClaimTemplate.spec.resources.requests.storage={{ prometheus_storage_size }} \
+          --set prometheus.prometheusSpec.serviceMonitorSelectorNilUsesHelmValues=false \
+          --set prometheus.prometheusSpec.podMonitorSelectorNilUsesHelmValues=false \
+          --set grafana.enabled=true \
+          --set grafana.adminPassword="{{ grafana_admin_password | default('admin') }}" \
+          --set grafana.persistence.enabled=true \
+          --set grafana.persistence.size={{ grafana_storage_size }} \
+          --set alertmanager.enabled=true \
+          --set alertmanager.alertmanagerSpec.storage.volumeClaimTemplate.spec.accessModes[0]=ReadWriteOnce \
+          --set alertmanager.alertmanagerSpec.storage.volumeClaimTemplate.spec.resources.requests.storage={{ alertmanager_storage_size }} \
+          --kubeconfig={{ playbook_dir }}/kubeconfig
+      environment:
+        KUBECONFIG: '{{ playbook_dir }}/kubeconfig'
+      register: helm_install_result
+      delegate_to: localhost
+      become: false
+      changed_when: "'has been upgraded' in helm_install_result.stdout or 'has been installed' in helm_install_result.stdout"
+
+    - name: Wait for Prometheus Operator to be ready
+      shell: kubectl rollout status deployment/prometheus-kube-prometheus-operator -n monitoring --kubeconfig={{ playbook_dir }}/kubeconfig --timeout=300s
+      retries: 5
+      delay: 10
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Wait for Prometheus to be ready
+      shell: kubectl rollout status statefulset/prometheus-prometheus-kube-prometheus-prometheus -n monitoring --kubeconfig={{ playbook_dir }}/kubeconfig --timeout=300s
+      retries: 5
+      delay: 10
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Wait for Grafana to be ready
+      shell: kubectl rollout status deployment/prometheus-grafana -n monitoring --kubeconfig={{ playbook_dir }}/kubeconfig --timeout=300s
+      retries: 5
+      delay: 10
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Generate compute-blade-agent monitoring resources
+      template:
+        src: compute-blade-agent-monitoring.j2
+        dest: /tmp/compute-blade-agent-monitoring.yaml
+      when: enable_compute_blade_agent | bool
+      delegate_to: localhost
+      become: false
+
+    - name: Deploy compute-blade-agent monitoring resources
+      shell: kubectl apply -f /tmp/compute-blade-agent-monitoring.yaml --kubeconfig={{ playbook_dir }}/kubeconfig
+      when: enable_compute_blade_agent | bool
+      delegate_to: localhost
+      become: false
+      changed_when: "'created' in result.stdout or 'configured' in result.stdout"
+      register: result
+
+    - name: Wait for compute-blade-agent ServiceMonitor to be picked up
+      pause:
+        seconds: 30
+
+    - name: Verify Prometheus targets
+      shell: kubectl get service prometheus-operated -n monitoring --kubeconfig={{ playbook_dir }}/kubeconfig -o jsonpath='{.metadata.name}'
+      register: prometheus_service
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Display Prometheus Operator installation details
+      debug:
+        msg:
+          - 'Prometheus Operator has been successfully installed'
+          - 'Namespace: monitoring'
+          - 'Prometheus: Available at prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090'
+          - 'Grafana: Available at prometheus-grafana.monitoring.svc.cluster.local:80'
+          - 'AlertManager: Available at prometheus-kube-alertmanager.monitoring.svc.cluster.local:9093'
+          - "Default Grafana admin password: {{ grafana_admin_password | default('admin') }}"
+          - ''
+          - 'To access Prometheus UI:'
+          - '  kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090'
+          - ''
+          - 'To access Grafana:'
+          - '  kubectl port-forward -n monitoring svc/prometheus-grafana 3000:80'
+          - ''
+          - 'To access AlertManager:'
+          - '  kubectl port-forward -n monitoring svc/prometheus-kube-alertmanager 9093:9093'
+
+  when: enable_prometheus_operator | bool

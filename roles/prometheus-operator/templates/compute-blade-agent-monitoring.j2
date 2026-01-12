@@ -1,0 +1,91 @@
+---
+# ServiceMonitor for compute-blade-agent metrics collection
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: compute-blade-agent
+  namespace: compute-blade-agent
+  labels:
+    app: compute-blade-agent
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: compute-blade-agent
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      scrapeTimeout: 10s
+---
+# PrometheusRule for compute-blade-agent alerting
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: compute-blade-agent
+  namespace: compute-blade-agent
+  labels:
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+    - name: compute-blade-agent.rules
+      interval: 30s
+      rules:
+        - alert: ComputeBladeAgentHighTemperature
+          expr: compute_blade_temperature_celsius > 80
+          for: 5m
+          labels:
+            severity: warning
+            component: compute-blade-agent
+          annotations:
+            summary: "Compute blade high temperature detected on {% raw %}{{ $labels.instance }}{% endraw %}"
+            description: "Compute blade temperature is {% raw %}{{ $value }}{% endraw %}°C (threshold: 80°C) on node {% raw %}{{ $labels.instance }}{% endraw %}"
+
+        - alert: ComputeBladeAgentCriticalTemperature
+          expr: compute_blade_temperature_celsius > 95
+          for: 2m
+          labels:
+            severity: critical
+            component: compute-blade-agent
+          annotations:
+            summary: "Compute blade CRITICAL temperature on {% raw %}{{ $labels.instance }}{% endraw %}"
+            description: "Compute blade temperature is {% raw %}{{ $value }}{% endraw %}°C (CRITICAL threshold: 95°C) on node {% raw %}{{ $labels.instance }}{% endraw %}"
+
+        - alert: ComputeBladeAgentDown
+          expr: up{job="compute-blade-agent"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            component: compute-blade-agent
+          annotations:
+            summary: "Compute blade agent is down on {% raw %}{{ $labels.instance }}{% endraw %}"
+            description: "Compute blade agent has been unreachable for more than 5 minutes on {% raw %}{{ $labels.instance }}{% endraw %}"
+
+        - alert: ComputeBladeAgentFanFailure
+          expr: compute_blade_fan_rpm == 0
+          for: 5m
+          labels:
+            severity: warning
+            component: compute-blade-agent
+          annotations:
+            summary: "Compute blade fan failure detected on {% raw %}{{ $labels.instance }}{% endraw %}"
+            description: "Compute blade fan is not running on {% raw %}{{ $labels.instance }}{% endraw %}"
+
+        - alert: ComputeBladeAgentHighFanSpeed
+          expr: compute_blade_fan_speed_percent > 90
+          for: 10m
+          labels:
+            severity: warning
+            component: compute-blade-agent
+          annotations:
+            summary: "Compute blade fan running at high speed on {% raw %}{{ $labels.instance }}{% endraw %}"
+            description: "Compute blade fan speed is {% raw %}{{ $value }}{% endraw %}% (threshold: 90%) on {% raw %}{{ $labels.instance }}{% endraw %}"
+---
+# Namespace for compute-blade-agent (ensure it exists)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: compute-blade-agent
+  labels:
+    name: compute-blade-agent
