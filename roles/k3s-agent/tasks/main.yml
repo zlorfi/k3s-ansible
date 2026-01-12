@@ -4,10 +4,17 @@
     path: /usr/local/bin/k3s
   register: k3s_binary
 
-- name: Get master node token
+- name: Read token from primary master
+  slurp:
+    src: /var/lib/rancher/k3s/server/node-token
+  register: primary_node_token
+  delegate_to: "{{ groups['master'][0] }}"
+  become: true
+
+- name: Get master node URL and token
   set_fact:
     k3s_url: "https://{{ hostvars[groups['master'][0]]['ansible_host'] }}:6443"
-    k3s_token: "{{ hostvars['k3s_token_holder']['token'] }}"
+    k3s_token: '{{ primary_node_token.content | b64decode | trim }}'
 
 - name: Download k3s installation script
   get_url:
@@ -33,4 +40,4 @@
 
 - name: Display success message
   debug:
-    msg: "K3s agent installed successfully and joined to cluster"
+    msg: 'K3s agent installed successfully and joined to cluster'
