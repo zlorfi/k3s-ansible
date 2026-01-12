@@ -41,7 +41,7 @@
     - worker
 
 - name: Install compute-blade-agent on workers
-  hosts: worker
+  hosts: all
   become: true
   roles:
     - role: compute-blade-agent

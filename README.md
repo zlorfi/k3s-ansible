@@ -898,17 +898,20 @@ The playbook includes automatic deployment of the Compute Blade Agent, a system 
 The compute-blade-agent deployment is controlled by the `enable_compute_blade_agent` variable in `inventory/hosts.ini`:
 
 ```ini
-# Enable/disable compute-blade-agent on all worker nodes
+# Enable/disable compute-blade-agent on all nodes (control-plane and workers)
 enable_compute_blade_agent=true
 ```
 
 To disable on specific nodes, add an override:
 
 ```ini
+[master]
+cm4-01 ansible_host=192.168.30.101 ansible_user=pi k3s_server_init=true enable_compute_blade_agent=true
+cm4-02 ansible_host=192.168.30.102 ansible_user=pi k3s_server_init=false enable_compute_blade_agent=false
+cm4-03 ansible_host=192.168.30.103 ansible_user=pi k3s_server_init=false enable_compute_blade_agent=false
+
 [worker]
-cm4-02 ansible_host=192.168.30.102 ansible_user=pi enable_compute_blade_agent=false
-cm4-03 ansible_host=192.168.30.103 ansible_user=pi
-cm4-04 ansible_host=192.168.30.104 ansible_user=pi
+cm4-04 ansible_host=192.168.30.104 ansible_user=pi enable_compute_blade_agent=true
 ```
 
 ### Deployment
@@ -919,7 +922,7 @@ The compute-blade-agent is automatically deployed as part of the main playbook:
 ansible-playbook site.yml
 ```
 
-Or deploy only the compute-blade-agent on worker nodes:
+Or deploy only the compute-blade-agent on all nodes:
 
 ```bash
 ansible-playbook site.yml --tags compute-blade-agent
@@ -927,11 +930,11 @@ ansible-playbook site.yml --tags compute-blade-agent
 
 ### Verification
 
-Check the agent status on a worker node:
+Check the agent status on any node:
 
 ```bash
-# SSH into a worker node
-ssh pi@192.168.30.102
+# SSH into any node
+ssh pi@192.168.30.101
 
 # Check service status
 sudo systemctl status compute-blade-agent
@@ -940,7 +943,7 @@ sudo systemctl status compute-blade-agent
 sudo journalctl -u compute-blade-agent -f
 
 # Check binary installation
-/usr/local/bin/compute-blade-agent --version
+/usr/bin/compute-blade-agent --version
 ```
 
 ### Configuration Files

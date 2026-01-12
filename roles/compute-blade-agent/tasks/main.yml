@@ -1,21 +1,21 @@
 ---
 - name: Skip compute-blade-agent installation if disabled
   debug:
-    msg: "compute-blade-agent installation is disabled for this node"
+    msg: 'compute-blade-agent installation is disabled for this node'
   when: not enable_compute_blade_agent | bool
 
 - name: Block for compute-blade-agent installation
   block:
     - name: Check if compute-blade-agent is already installed
       stat:
-        path: /usr/local/bin/compute-blade-agent
+        path: /usr/bin/compute-blade-agent
       register: agent_binary
 
     - name: Download compute-blade-agent installer
       shell: curl -L -o /tmp/compute-blade-agent-installer.sh https://raw.githubusercontent.com/compute-blade-community/compute-blade-agent/main/hack/autoinstall.sh
       when: not agent_binary.stat.exists
       environment:
-        PATH: "{{ ansible_env.PATH }}"
+        PATH: '{{ ansible_env.PATH }}'
 
     - name: Make installer executable
       file:
@@ -27,7 +27,7 @@
       shell: /tmp/compute-blade-agent-installer.sh
       when: not agent_binary.stat.exists
       environment:
-        PATH: "{{ ansible_env.PATH }}"
+        PATH: '{{ ansible_env.PATH }}'
 
     - name: Wait for compute-blade-agent service to be available
       systemd:
@@ -48,7 +48,7 @@
 
     - name: Display compute-blade-agent service status
       debug:
-        msg: "compute-blade-agent service is {{ agent_service.status.ActiveState }}"
+        msg: 'compute-blade-agent service is {{ agent_service.status.ActiveState }}'
 
     - name: Check if compute-blade-agent config exists
       stat:
@@ -57,20 +57,20 @@
 
     - name: Display config location if it exists
       debug:
-        msg: "compute-blade-agent config found at /etc/compute-blade-agent/config.yaml"
+        msg: 'compute-blade-agent config found at /etc/compute-blade-agent/config.yaml'
       when: agent_config.stat.exists
 
     - name: Check compute-blade-agent binary version
-      shell: /usr/local/bin/compute-blade-agent --version 2>/dev/null || echo "Version info not available"
+      shell: /usr/bin/compute-blade-agent --version 2>/dev/null || echo "Version info not available"
       register: agent_version
       changed_when: false
 
     - name: Display compute-blade-agent installation result
       debug:
         msg:
-          - "compute-blade-agent has been successfully installed and started"
-          - "Binary location: /usr/local/bin/compute-blade-agent"
-          - "Config location: /etc/compute-blade-agent/config.yaml"
-          - "Service status: {{ agent_service.status.ActiveState }}"
+          - 'compute-blade-agent has been successfully installed and started'
+          - 'Binary location: /usr/bin/compute-blade-agent'
+          - 'Config location: /etc/compute-blade-agent/config.yaml'
+          - 'Service status: {{ agent_service.status.ActiveState }}'
 
   when: enable_compute_blade_agent | bool

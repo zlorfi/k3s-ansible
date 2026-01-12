@@ -1,4 +1,4 @@
-# Compute Blade Agent Deployment Checklist
+# K3s Cluster Deployment Checklist (with Compute Blade Agent on All Nodes)
 
 ## Pre-Deployment
 
@@ -20,7 +20,7 @@ This will:
 1. Prepare all nodes (prerequisites)
 2. Install K3s server on master
 3. Install K3s agents on workers
-4. Install compute-blade-agent on workers
+4. Install compute-blade-agent on all nodes (control-plane and workers)
 5. Deploy test nginx application
 
 - [ ] Start full deployment
@@ -43,7 +43,7 @@ ansible-playbook site.yml --tags compute-blade-agent
 ```
 
 - [ ] Use on existing K3s cluster
-- [ ] Deploy agent to all configured workers
+- [ ] Deploy agent to all configured nodes (masters and workers)
 - [ ] Verify with verification script
 
 ## Post-Deployment Verification
@@ -64,7 +64,7 @@ bash scripts/verify-compute-blade-agent.sh
 ```
 
 - [ ] All worker nodes pass connectivity check
-- [ ] Binary is installed at `/usr/local/bin/compute-blade-agent`
+- [ ] Binary is installed at `/usr/bin/compute-blade-agent`
 - [ ] Service status shows "Running"
 - [ ] Config file exists at `/etc/compute-blade-agent/config.yaml`
 
@@ -126,7 +126,7 @@ kubectl apply -f manifests/compute-blade-agent-daemonset.yaml
 
 - [ ] Check status: `sudo systemctl status compute-blade-agent`
 - [ ] Check logs: `sudo journalctl -u compute-blade-agent -f`
-- [ ] Check if binary exists: `ls -la /usr/local/bin/compute-blade-agent`
+- [ ] Check if binary exists: `ls -la /usr/bin/compute-blade-agent`
 - [ ] Check systemd unit: `cat /etc/systemd/system/compute-blade-agent.service`
 
 ### Installation Failed
@@ -159,7 +159,7 @@ enable_compute_blade_agent=true  # or false
 
 ### Per-Node Configuration
 
-Note: cm4-02 and cm4-03 are now **master nodes**, not workers. To enable/disable compute-blade-agent on specific nodes:
+Compute-blade-agent is now installed on all nodes (control-plane and workers). To enable/disable on specific nodes:
 
 ```ini
 [master]
@@ -172,9 +172,8 @@ cm4-04 ansible_host=192.168.30.104 ansible_user=pi enable_compute_blade_agent=tr
 ```
 
 - [ ] Per-node settings configured as needed
-- [ ] Master nodes typically don't need compute-blade-agent
 - [ ] Saved inventory file
-- [ ] Re-run playbook if changes made
+- [ ] Re-run playbook if changes made: `ansible-playbook site.yml --tags compute-blade-agent`
 
 ### Agent Configuration
 
@@ -211,13 +210,13 @@ sudo journalctl -u compute-blade-agent -f
 - [ ] Monitor for any issues
 - [ ] Press Ctrl+C to exit
 
-### Check Service on All Workers
+### Check Service on All Nodes
 
 ```bash
-ansible worker -m shell -a "systemctl status compute-blade-agent" --become
+ansible k3s_cluster -m shell -a "systemctl status compute-blade-agent" --become
 ```
 
-- [ ] All workers show active status
+- [ ] All nodes show active status
 
 ## HA Cluster Maintenance
 
@@ -243,8 +242,8 @@ watch kubectl get nodes
 ### Uninstall K3s from All Nodes
 
 ```bash
-ansible all -m shell -a "bash /usr/local/bin/k3s-uninstall.sh" --become
-ansible worker -m shell -a "bash /usr/local/bin/k3s-agent-uninstall.sh" --become
+ansible k3s_cluster -m shell -a "bash /usr/local/bin/k3s-uninstall.sh" --become
+ansible k3s_cluster -m shell -a "bash /usr/local/bin/k3s-agent-uninstall.sh 2>/dev/null || true" --become
 ```
 
 - [ ] All K3s services stopped

@@ -67,12 +67,12 @@ for worker in $WORKERS; do
     # Check binary
     echo -n "Binary: "
     if ssh -o ConnectTimeout=5 -o BatchMode=yes "pi@${HOST_IP}" \
-        "[ -f /usr/local/bin/compute-blade-agent ]" &> /dev/null; then
+        "[ -f /usr/bin/compute-blade-agent ]" &> /dev/null; then
         echo -e "${GREEN}✓ Installed${NC}"
 
         # Try to get version
         VERSION=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "pi@${HOST_IP}" \
-            "/usr/local/bin/compute-blade-agent --version 2>/dev/null" || echo "unknown")
+            "/usr/bin/compute-blade-agent --version 2>/dev/null" || echo "unknown")
         echo "        Version: $VERSION"
     else
         echo -e "${RED}✗ Not found${NC}"

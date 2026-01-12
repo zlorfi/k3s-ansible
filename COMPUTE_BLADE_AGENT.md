@@ -1,6 +1,6 @@
 # Compute Blade Agent Deployment Guide
 
-Quick reference for deploying and managing the Compute Blade Agent in your k3s-ansible cluster.
+Quick reference for deploying and managing the Compute Blade Agent on all nodes in your k3s-ansible cluster (control-plane and worker nodes).
 
 ## Quick Start
 
@@ -49,28 +49,28 @@ cm4-04 ansible_host=192.168.30.104 ansible_user=pi
 ### Check Service Status
 
 ```bash
-ssh pi@<worker-ip>
+ssh pi@<node-ip>
 sudo systemctl status compute-blade-agent
 ```
 
 ### View Logs
 
 ```bash
-ssh pi@<worker-ip>
+ssh pi@<node-ip>
 sudo journalctl -u compute-blade-agent -f
 ```
 
 ### Check Installation
 
 ```bash
-ssh pi@<worker-ip>
-/usr/local/bin/compute-blade-agent --version
+ssh pi@<node-ip>
+/usr/bin/compute-blade-agent --version
 ls -la /etc/compute-blade-agent/
 ```
 
 ## File Locations
 
-- **Binary**: `/usr/local/bin/compute-blade-agent`
+- **Binary**: `/usr/bin/compute-blade-agent`
 - **Config**: `/etc/compute-blade-agent/config.yaml`
 - **Systemd Service**: `/etc/systemd/system/compute-blade-agent.service`
 - **Logs**: `journalctl -u compute-blade-agent`
@@ -81,7 +81,7 @@ Configure via `BLADE_` prefixed environment variables:
 
 ```bash
 export BLADE_CONFIG_PATH=/etc/compute-blade-agent/config.yaml
-/usr/local/bin/compute-blade-agent
+/usr/bin/compute-blade-agent
 ```
 
 ## Monitoring
@@ -146,7 +146,7 @@ sudo systemctl restart compute-blade-agent
 
 ```bash
 # SSH to node
-ssh pi@<worker-ip>
+ssh pi@<node-ip>
 
 # Check if uninstall script exists
 ls -la /usr/local/bin/*compute-blade*
@@ -163,14 +163,14 @@ ansible-playbook site.yml --tags compute-blade-agent
 ### From Single Node
 
 ```bash
-ssh pi@<worker-ip>
+ssh pi@<node-ip>
 sudo bash /usr/local/bin/k3s-uninstall-compute-blade-agent.sh
 ```
 
-### From All Worker Nodes
+### From All Nodes
 
 ```bash
-ansible worker -m shell -a "bash /usr/local/bin/k3s-uninstall-compute-blade-agent.sh" --become
+ansible k3s_cluster -m shell -a "bash /usr/local/bin/k3s-uninstall-compute-blade-agent.sh" --become
 ```
 
 ## Features
