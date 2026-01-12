@@ -176,6 +176,7 @@ impl MikroTikClient {
     pub async fn run_script(&mut self, script_name: &str) -> Result<()> {
         info!("Running script: {}", script_name);
 
+        // Use the script name directly with the source parameter
         let command = vec![
             "/system/script/run".to_string(),
             format!("=source={}", script_name),
@@ -183,6 +184,8 @@ impl MikroTikClient {
 
         self.send_command(&command).await?;
         let response = self.read_response().await?;
+
+        debug!("Script execution response: {}", response);
 
         if response.contains("!done") {
             Ok(())
@@ -202,12 +205,20 @@ impl MikroTikClient {
         self.send_command(&command).await?;
         let response = self.read_response().await?;
 
+        // Debug: print raw response
+        eprintln!(
+            "\n=== RAW API RESPONSE ===\n{}\n======================\n",
+            response
+        );
+
         if !response.contains("!done") {
             if response.contains("!trap") {
                 return Err(anyhow!("Failed to query PoE status: {}", response));
             }
             return Ok(format!("Status query returned: {}", response));
         }
+
+        debug!("Raw API response: {}", response);
 
         let mut status_output = String::new();
         status_output.push_str("\n");
@@ -219,60 +230,47 @@ impl MikroTikClient {
 
         // Parse the RouterOS API response - split by !re to get individual records
         let records: Vec<&str> = response.split("!re").collect();
+        debug!("Found {} records", records.len());
         let mut interfaces: Vec<(String, String)> = Vec::new();
 
-        for record in records.iter().skip(1) {
+        for (idx, record) in records.iter().enumerate() {
+            debug!(
+                "Processing record {}: {}",
+                idx,
+                &record[..std::cmp::min(100, record.len())]
+            );
+
             if record.contains("!done") {
                 break;
             }
 
-            // Extract key=value pairs from this record
-            let fields: Vec<&str> = record.split('=').collect();
             let mut name = String::new();
             let mut poe_out = String::new();
 
-            // Process fields: [0] is .id or empty, [1] is key, [2] is value, [3] is key, [4] is value, etc.
-            let mut i = 0;
-            while i < fields.len() {
-                let field = fields[i].trim();
-
-                // Skip .id field and empty fields
-                if field.is_empty() || field.starts_with('.') {
-                    i += 1;
-                    continue;
-                }
-
-                // Check if this is a key and next index has a value
-                if i + 1 < fields.len() {
-                    let key = field;
-                    let value = fields[i + 1].trim();
-
-                    match key {
-                        "name" => {
-                            // Extract just the name part (stop at newline or next special char)
-                            name = value
-                                .split(|c: char| c == '\n' || c == '!' || c == '\r')
-                                .next()
-                                .unwrap_or("")
-                                .trim()
-                                .to_string();
-                        }
-                        "poe-out" => {
-                            // Extract just the poe-out value
-                            poe_out = value
-                                .split(|c: char| c == '\n' || c == '!' || c == '\r')
-                                .next()
-                                .unwrap_or("")
-                                .trim()
-                                .to_string();
-                        }
-                        _ => {}
-                    }
-                    i += 2;
-                } else {
-                    i += 1;
+            // Look for =name= and =poe-out= patterns in the response
+            if let Some(name_start) = record.find("=name=") {
+                let after_name = &record[name_start + 6..];
+                if let Some(name_end) = after_name.find('=') {
+                    name = after_name[..name_end].trim().to_string();
                 }
             }
+
+            if let Some(poe_start) = record.find("=poe-out=") {
+                let after_poe = &record[poe_start + 9..];
+                if let Some(poe_end) = after_poe.find('=') {
+                    poe_out = after_poe[..poe_end].trim().to_string();
+                } else {
+                    // Last field - extract until special character
+                    poe_out = after_poe
+                        .split(|c: char| c == '!' || c == '\n' || c == '\r')
+                        .next()
+                        .unwrap_or("")
+                        .trim()
+                        .to_string();
+                }
+            }
+
+            debug!("Parsed - name: '{}', poe-out: '{}'", name, poe_out);
 
             if !name.is_empty() {
                 if poe_out.is_empty() {

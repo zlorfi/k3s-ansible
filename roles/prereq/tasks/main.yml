@@ -33,6 +33,26 @@
     state: present
   when: extra_packages is defined and extra_packages | length > 0
 
+- name: Ensure [cm4] section exists in boot config
+  lineinfile:
+    path: /boot/firmware/config.txt
+    line: '[cm4]'
+    state: present
+
+- name: Configure CM4 UART settings (enable_uart)
+  lineinfile:
+    path: /boot/firmware/config.txt
+    insertafter: '^\[cm4\]'
+    line: 'enable_uart=1'
+    state: present
+
+- name: Configure CM4 UART settings (uart5 overlay)
+  lineinfile:
+    path: /boot/firmware/config.txt
+    insertafter: '^enable_uart=1'
+    line: 'dtoverlay=uart5'
+    state: present
+
 - name: Enable cgroup memory and swap
   lineinfile:
     path: /boot/firmware/cmdline.txt
