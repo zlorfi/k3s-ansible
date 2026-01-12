@@ -1,0 +1,166 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: default-backend
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: default-backend
+  namespace: default-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: default-backend
+  template:
+    metadata:
+      labels:
+        app: default-backend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: html
+        configMap:
+          name: default-backend-html
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: default-backend-html
+  namespace: default-backend
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>K3s Default Backend</title>
+      <style>
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+        body {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 20px;
+        }
+        .container {
+          text-align: center;
+          background: white;
+          padding: 50px 40px;
+          border-radius: 10px;
+          box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+          max-width: 600px;
+          width: 100%;
+        }
+        .emoji {
+          font-size: 80px;
+          margin-bottom: 20px;
+          display: block;
+        }
+        h1 {
+          color: #333;
+          margin-bottom: 20px;
+          font-size: 2.5em;
+        }
+        p {
+          color: #666;
+          line-height: 1.8;
+          font-size: 1.1em;
+          margin-bottom: 15px;
+        }
+        .status {
+          margin-top: 40px;
+          padding-top: 30px;
+          border-top: 2px solid #eee;
+        }
+        .status-item {
+          margin: 15px 0;
+          color: #555;
+        }
+        .status-label {
+          font-weight: 600;
+          color: #333;
+        }
+        .cluster-info {
+          background: #f8f9fa;
+          padding: 20px;
+          border-radius: 8px;
+          margin-top: 20px;
+          border-left: 4px solid #667eea;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <span class="emoji">&#128640;</span>
+        <h1>Default Backend</h1>
+        <p>The requested path does not match any configured ingress rules.</p>
+        <p style="font-size: 0.95em; color: #999;">This is the catch-all route for unmapped traffic.</p>
+
+        <div class="status">
+          <div class="status-item">
+            <span class="status-label">Status:</span> Backend is operational
+          </div>
+          <div class="status-item">
+            <span class="status-label">Cluster:</span> K3s Multi-Master HA
+          </div>
+          <div class="status-item">
+            <span class="status-label">Ingress:</span> Traefik
+          </div>
+        </div>
+
+        <div class="cluster-info">
+          <p style="margin: 0; font-size: 0.9em;">
+            <strong>Need help?</strong><br>
+            Check your ingress configuration or contact your cluster administrator.
+          </p>
+        </div>
+      </div>
+    </body>
+    </html>
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: default-backend
+  namespace: default-backend
+spec:
+  selector:
+    app: default-backend
+  ports:
+  - port: 80
+    targetPort: 80
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: catch-all
+  namespace: default-backend
+spec:
+  entryPoints:
+    - web
+    - websecure
+  routes:
+    - match: PathPrefix(`/`)
+      priority: 1
+      kind: Rule
+      services:
+        - name: default-backend
+          port: 80

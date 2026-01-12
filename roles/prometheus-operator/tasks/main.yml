@@ -91,6 +91,24 @@
       become: false
       changed_when: false
 
+    - name: Create compute-blade-agent namespace first
+      shell: |
+        kubectl create namespace compute-blade-agent --kubeconfig={{ playbook_dir }}/kubeconfig 2>/dev/null || true
+      when: enable_compute_blade_agent | bool
+      delegate_to: localhost
+      become: false
+      changed_when: false
+
+    - name: Wait for namespace to be ready
+      shell: |
+        kubectl get namespace compute-blade-agent --kubeconfig={{ playbook_dir }}/kubeconfig
+      when: enable_compute_blade_agent | bool
+      delegate_to: localhost
+      become: false
+      retries: 5
+      delay: 2
+      changed_when: false
+
     - name: Generate compute-blade-agent monitoring resources
       template:
         src: compute-blade-agent-monitoring.j2

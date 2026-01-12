@@ -52,7 +52,7 @@
 - name: Install Prometheus Operator
   hosts: "{{ groups['master'][0] }}"
   gather_facts: false
-  become: false
+  become: true
   roles:
     - role: prometheus-operator
   tags:
@@ -62,7 +62,7 @@
 - name: Deploy test applications
   hosts: "{{ groups['master'][0] }}"
   gather_facts: true
-  become: false
+  become: true
   roles:
     - role: k3s-deploy-test
   tags:

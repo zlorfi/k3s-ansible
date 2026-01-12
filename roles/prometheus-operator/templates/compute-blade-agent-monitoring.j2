@@ -81,11 +81,3 @@ spec:
           annotations:
             summary: "Compute blade fan running at high speed on {% raw %}{{ $labels.instance }}{% endraw %}"
             description: "Compute blade fan speed is {% raw %}{{ $value }}{% endraw %}% (threshold: 90%) on {% raw %}{{ $labels.instance }}{% endraw %}"
----
-# Namespace for compute-blade-agent (ensure it exists)
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: compute-blade-agent
-  labels:
-    name: compute-blade-agent

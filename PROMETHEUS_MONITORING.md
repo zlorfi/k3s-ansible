@@ -115,7 +115,7 @@ Edit `inventory/hosts.ini`:
 enable_prometheus_operator=true
 
 # (Optional) Set Grafana admin password
-grafana_admin_password=MySecurePassword123!
+grafana_admin_password=SecurePassword123!
 
 # Enable compute-blade-agent monitoring
 enable_compute_blade_agent=true
