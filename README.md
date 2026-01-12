@@ -1072,7 +1072,7 @@ Create a new playbook `dns-config.yml`:
 ---
 - name: Configure external DNS resolver
   hosts: all
-  become: yes
+  become: true
   tasks:
     - name: Update /etc/resolv.conf with custom DNS
       copy:

@@ -1,0 +1,143 @@
+---
+- name: Uninstall K3s from all nodes
+  hosts: k3s_cluster
+  become: true
+  gather_facts: true
+
+  vars:
+    k3s_data_dir: /var/lib/rancher/k3s
+    k3s_etc_dir: /etc/rancher/k3s
+
+  tasks:
+    - name: Stop K3s services
+      block:
+        - name: Stop k3s server service (masters)
+          systemd:
+            name: k3s
+            state: stopped
+            enabled: no
+          ignore_errors: yes
+          when: inventory_hostname in groups['master']
+
+        - name: Stop k3s agent service (workers)
+          systemd:
+            name: k3s-agent
+            state: stopped
+            enabled: no
+          ignore_errors: yes
+          when: inventory_hostname in groups['worker']
+
+    - name: Run K3s uninstall scripts
+      block:
+        - name: Run k3s uninstall script (masters)
+          shell: |
+            if [ -f /usr/local/bin/k3s-uninstall.sh ]; then
+              /usr/local/bin/k3s-uninstall.sh
+            fi
+          ignore_errors: yes
+          when: inventory_hostname in groups['master']
+          register: master_uninstall
+
+        - name: Run k3s agent uninstall script (workers)
+          shell: |
+            if [ -f /usr/local/bin/k3s-agent-uninstall.sh ]; then
+              /usr/local/bin/k3s-agent-uninstall.sh
+            fi
+          ignore_errors: yes
+          when: inventory_hostname in groups['worker']
+          register: worker_uninstall
+
+    - name: Kill any remaining K3s processes
+      shell: |
+        pkill -f "k3s"
+        pkill -f "containerd"
+      ignore_errors: yes
+
+    - name: Remove K3s data directories
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ k3s_data_dir }}"
+        - "{{ k3s_etc_dir }}"
+        - /var/lib/cni
+        - /var/log/pods
+        - /var/log/containers
+        - /var/run/k3s
+        - /var/cache/k3s
+      ignore_errors: yes
+
+    - name: Remove K3s binaries and scripts
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /usr/local/bin/k3s
+        - /usr/local/bin/k3s-killall.sh
+        - /usr/local/bin/k3s-uninstall.sh
+        - /usr/local/bin/k3s-agent-uninstall.sh
+        - /usr/local/bin/kubectl
+        - /usr/local/bin/crictl
+        - /usr/local/bin/ctr
+      ignore_errors: yes
+
+    - name: Remove K3s systemd files
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/systemd/system/k3s.service
+        - /etc/systemd/system/k3s-agent.service
+        - /etc/systemd/system/k3s.service.env
+        - /etc/systemd/system/k3s.service.d
+        - /etc/systemd/system/k3s-agent.service.env
+        - /etc/systemd/system/k3s-agent.service.d
+      ignore_errors: yes
+
+    - name: Reload systemd daemon
+      systemd:
+        daemon_reload: yes
+      ignore_errors: yes
+
+    - name: Remove kubeconfig from user home
+      file:
+        path: "/home/{{ ansible_user }}/.kube"
+        state: absent
+      ignore_errors: yes
+
+    - name: Display uninstall status for {{ inventory_hostname }}
+      debug:
+        msg:
+          - "K3s uninstall completed on {{ inventory_hostname }}"
+          - "Data directories removed"
+          - "Services stopped and disabled"
+          - "Systemd files cleaned up"
+
+- name: Clean up local kubeconfig
+  hosts: localhost
+  gather_facts: false
+  tasks:
+    - name: Remove kubeconfig from playbook directory
+      file:
+        path: "{{ playbook_dir }}/kubeconfig"
+        state: absent
+      ignore_errors: yes
+
+    - name: Display cleanup completion
+      debug:
+        msg:
+          - ""
+          - "╔═══════════════════════════════════════════════════════════╗"
+          - "║ K3s Uninstall Complete!                                  ║"
+          - "╚═══════════════════════════════════════════════════════════╝"
+          - ""
+          - "All nodes have been cleaned:"
+          - "  ✓ K3s services stopped"
+          - "  ✓ Uninstall scripts executed"
+          - "  ✓ Data directories removed"
+          - "  ✓ Binaries cleaned up"
+          - "  ✓ Systemd files removed"
+          - ""
+          - "Ready for fresh K3s installation:"
+          - "  ansible-playbook site.yml --tags k3s-server,k3s-agent"
+          - ""

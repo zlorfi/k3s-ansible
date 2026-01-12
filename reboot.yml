@@ -1,16 +1,16 @@
 ---
 - name: Reboot k3s worker nodes
   hosts: worker
-  become: yes
+  become: true
   serial: 1
   tasks:
     - name: Display node being rebooted
       debug:
-        msg: "Rebooting worker node: {{ inventory_hostname }} ({{ ansible_host }})"
+        msg: 'Rebooting worker node: {{ inventory_hostname }} ({{ ansible_host }})'
 
     - name: Reboot worker node
       reboot:
-        msg: "Reboot initiated by Ansible"
+        msg: 'Reboot initiated by Ansible'
         connect_timeout: 5
         reboot_timeout: 600
         pre_reboot_delay: 0
@@ -33,20 +33,20 @@
 
     - name: Display node ready
       debug:
-        msg: "Worker node {{ inventory_hostname }} is back online and k3s-agent is running"
+        msg: 'Worker node {{ inventory_hostname }} is back online and k3s-agent is running'
 
 - name: Reboot k3s master nodes
   hosts: master
-  become: yes
+  become: true
   serial: 1
   tasks:
     - name: Display node being rebooted
       debug:
-        msg: "Rebooting master node: {{ inventory_hostname }} ({{ ansible_host }})"
+        msg: 'Rebooting master node: {{ inventory_hostname }} ({{ ansible_host }})'
 
     - name: Reboot master node
       reboot:
-        msg: "Reboot initiated by Ansible"
+        msg: 'Reboot initiated by Ansible'
         connect_timeout: 5
         reboot_timeout: 600
         pre_reboot_delay: 0
@@ -75,7 +75,7 @@
 
     - name: Display node ready
       debug:
-        msg: "Master node {{ inventory_hostname }} is back online and k3s is running"
+        msg: 'Master node {{ inventory_hostname }} is back online and k3s is running'
 
 - name: Verify cluster status
   hosts: master[0]

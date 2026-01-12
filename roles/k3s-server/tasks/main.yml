@@ -40,13 +40,7 @@
 
     - name: Store master node token
       set_fact:
-        k3s_node_token: "{{ node_token.content | b64decode | trim }}"
-
-    - name: Add node token to dummy host
-      add_host:
-        name: "k3s_token_holder"
-        token: "{{ k3s_node_token }}"
-      run_once: true
+        k3s_node_token: '{{ node_token.content | b64decode | trim }}'
 
   when: k3s_server_init | default(false) | bool
 
@@ -60,10 +54,17 @@
         delay: 10
         timeout: 300
 
+    - name: Read token from primary master
+      slurp:
+        src: /var/lib/rancher/k3s/server/node-token
+      register: primary_node_token
+      delegate_to: "{{ groups['master'][0] }}"
+      become: true
+
     - name: Get cluster credentials
       set_fact:
         k3s_url: "https://{{ hostvars[groups['master'][0]]['ansible_host'] }}:6443"
-        k3s_token: "{{ hostvars['k3s_token_holder']['token'] }}"
+        k3s_token: '{{ primary_node_token.content | b64decode | trim }}'
 
     - name: Install k3s on additional master
       shell: |
@@ -84,34 +85,34 @@
 # Common tasks for all master nodes
 - name: Create .kube directory for user
   file:
-    path: "/home/{{ ansible_user }}/.kube"
+    path: '/home/{{ ansible_user }}/.kube'
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: '{{ ansible_user }}'
+    group: '{{ ansible_user }}'
     mode: '0755'
 
 - name: Copy k3s kubeconfig to user home
   copy:
     src: /etc/rancher/k3s/k3s.yaml
-    dest: "/home/{{ ansible_user }}/.kube/config"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    dest: '/home/{{ ansible_user }}/.kube/config'
+    owner: '{{ ansible_user }}'
+    group: '{{ ansible_user }}'
     mode: '0600'
     remote_src: yes
 
 - name: Replace localhost with master IP in kubeconfig
   replace:
-    path: "/home/{{ ansible_user }}/.kube/config"
+    path: '/home/{{ ansible_user }}/.kube/config'
     regexp: '127.0.0.1'
-    replace: "{{ ansible_host }}"
+    replace: '{{ ansible_host }}'
 
 - name: Fetch kubeconfig from primary master only
   fetch:
-    src: "/home/{{ ansible_user }}/.kube/config"
-    dest: "{{ playbook_dir }}/kubeconfig"
+    src: '/home/{{ ansible_user }}/.kube/config'
+    dest: '{{ playbook_dir }}/kubeconfig'
     flat: yes
   when: k3s_server_init | default(false) | bool
 
 - name: Display success message
   debug:
-    msg: "K3s server installed successfully on {{ inventory_hostname }}"
+    msg: 'K3s server installed successfully on {{ inventory_hostname }}'

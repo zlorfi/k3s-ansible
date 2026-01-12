@@ -1,13 +1,13 @@
 ---
 - name: Deploy Telegraf to all nodes
   hosts: all
-  become: yes
+  become: true
   pre_tasks:
     - name: Parse .env file and set variables
       block:
         - name: Read .env file
           slurp:
-            src: "{{ playbook_dir }}/.env"
+            src: '{{ playbook_dir }}/.env'
           register: env_file
           delegate_to: localhost
           become: false
