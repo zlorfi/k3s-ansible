@@ -68,13 +68,31 @@ enable_compute_blade_agent=true        # Hardware monitoring
 enable_prometheus_operator=true        # Monitoring stack
 ```
 
-### 3. Test Connectivity
+### 3. Setup Environment Variables
+
+Create a `.env` file in the repository root with your credentials:
+
+```bash
+cat > .env << EOF
+INFLUXDB_HOST=192.168.10.10
+INFLUXDB_PORT=8086
+INFLUXDB_ORG=family
+INFLUXDB_BUCKET=rpi-cluster
+INFLUXDB_TOKEN=your-api-token-here
+EOF
+```
+
+**⚠️ Security Note:** This file is ignored by Git (`.gitignore`) and should never be committed. Keep actual tokens secure and only on your local machine.
+
+### 4. Test Connectivity
 
 ```bash
 ansible all -m ping
 ```
 
 ## 🚀 Deployment Commands
+
+**Prerequisites:** Make sure your `inventory/hosts.ini` is configured and `.env` file is created (see Setup steps above).
 
 ### Full Cluster Deployment
 ```bash
