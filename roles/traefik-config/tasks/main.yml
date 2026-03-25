@@ -1,0 +1,68 @@
+---
+- name: Read .env file
+  slurp:
+    src: '{{ playbook_dir }}/.env'
+  register: env_file
+  delegate_to: localhost
+  become: false
+
+- name: Set Cloudflare and ACME variables from .env
+  set_fact:
+    cloudflare_api_token: "{{ (env_file.content | b64decode | regex_search('CF_DNS_API_TOKEN=(.+)$', '\\1', multiline=True) | first) }}"
+    acme_email: "{{ (env_file.content | b64decode | regex_search('ACME_EMAIL=(.+)$', '\\1', multiline=True) | first) }}"
+  no_log: true
+
+- name: Create traefik-cloudflare-token secret
+  shell: |
+    kubectl create secret generic traefik-cloudflare-token \
+      --from-literal=CF_DNS_API_TOKEN={{ cloudflare_api_token }} \
+      --namespace kube-system \
+      --dry-run=client -o yaml \
+      --kubeconfig={{ playbook_dir }}/kubeconfig \
+    | kubectl apply -f - --kubeconfig={{ playbook_dir }}/kubeconfig
+  no_log: true
+  delegate_to: localhost
+  become: false
+  changed_when: true
+
+- name: Template Traefik HelmChartConfig
+  template:
+    src: traefik-helmchartconfig.j2
+    dest: /tmp/traefik-helmchartconfig.yaml
+  delegate_to: localhost
+  become: false
+
+- name: Apply Traefik HelmChartConfig
+  shell: kubectl apply -f /tmp/traefik-helmchartconfig.yaml --kubeconfig={{ playbook_dir }}/kubeconfig
+  register: helmchartconfig_result
+  delegate_to: localhost
+  become: false
+  changed_when: "'configured' in helmchartconfig_result.stdout or 'created' in helmchartconfig_result.stdout"
+
+- name: Remove temporary HelmChartConfig file
+  file:
+    path: /tmp/traefik-helmchartconfig.yaml
+    state: absent
+  delegate_to: localhost
+  become: false
+
+- name: Wait for Traefik rollout after config change
+  shell: kubectl rollout status deployment/traefik -n kube-system --kubeconfig={{ playbook_dir }}/kubeconfig --timeout=120s
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  retries: 3
+  delay: 10
+
+- name: Display Traefik configuration summary
+  debug:
+    msg:
+      - 'Traefik ACME configuration applied'
+      - 'Certificate resolver: {{ traefik_certresolver_name }}'
+      - 'ACME server: {{ traefik_acme_server }}'
+      - 'ACME storage: {{ traefik_acme_storage }}'
+      - 'DNS challenge provider: cloudflare'
+      - 'HTTP->HTTPS redirect: {{ traefik_redirect_http_to_https }}'
+      - ''
+      - 'Ingress objects using this resolver must set:'
+      - '  traefik.ingress.kubernetes.io/router.tls.certresolver: {{ traefik_certresolver_name }}'

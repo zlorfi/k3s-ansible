@@ -1,0 +1,22 @@
+---
+# Traefik ACME / Let's Encrypt configuration via Cloudflare DNS-01 challenge
+# Secrets (acme_email, cloudflare_api_token) are read from .env at runtime.
+
+# Name of the ACME certificate resolver — must match the certresolver annotation
+# used in Ingress/IngressRoute objects (e.g. vaultwarden-deployment.yaml).
+traefik_certresolver_name: letsencrypt-cloudflare
+
+# Let's Encrypt ACME server.
+# Use the staging URL while testing to avoid rate-limit hits:
+#   https://acme-staging-v02.api.letsencrypt.org/directory
+traefik_acme_server: https://acme-v02.api.letsencrypt.org/directory
+
+# Path inside the Traefik pod where ACME state (certs, account) is persisted.
+traefik_acme_storage: /data/acme.json
+
+# Traefik entrypoint names — must match annotations in ingress manifests.
+traefik_entrypoint_web: web           # HTTP  (port 80)
+traefik_entrypoint_websecure: websecure  # HTTPS (port 443)
+
+# Redirect all HTTP traffic to HTTPS.
+traefik_redirect_http_to_https: true

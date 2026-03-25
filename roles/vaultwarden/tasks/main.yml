@@ -1,0 +1,54 @@
+---
+- name: Read .env file
+  slurp:
+    src: '{{ playbook_dir }}/.env'
+  register: env_file
+  delegate_to: localhost
+  become: false
+
+- name: Set Vaultwarden variables from .env
+  set_fact:
+    vaultwarden_admin_token: "{{ (env_file.content | b64decode | regex_search('ADMIN_TOKEN=(.+)$', '\\1', multiline=True) | first) }}"
+  no_log: true
+
+- name: Create vaultwarden namespace
+  shell: kubectl create namespace vaultwarden --kubeconfig={{ playbook_dir }}/kubeconfig 2>/dev/null || true
+  delegate_to: localhost
+  become: false
+  changed_when: false
+
+- name: Create vaultwarden-secret from .env
+  shell: |
+    kubectl create secret generic vaultwarden-secret \
+      --from-literal=ADMIN_TOKEN={{ vaultwarden_admin_token }} \
+      --namespace vaultwarden \
+      --dry-run=client -o yaml \
+      --kubeconfig={{ playbook_dir }}/kubeconfig \
+    | kubectl apply -f - --kubeconfig={{ playbook_dir }}/kubeconfig
+  no_log: true
+  delegate_to: localhost
+  become: false
+  changed_when: true
+
+- name: Apply vaultwarden manifest
+  shell: kubectl apply -f {{ playbook_dir }}/manifests/vaultwarden-deployment.yaml --kubeconfig={{ playbook_dir }}/kubeconfig
+  register: vaultwarden_apply
+  delegate_to: localhost
+  become: false
+  changed_when: "'configured' in vaultwarden_apply.stdout or 'created' in vaultwarden_apply.stdout"
+
+- name: Wait for vaultwarden rollout
+  shell: kubectl rollout status deployment/vaultwarden -n vaultwarden --kubeconfig={{ playbook_dir }}/kubeconfig --timeout=120s
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  retries: 3
+  delay: 10
+
+- name: Display vaultwarden deployment summary
+  debug:
+    msg:
+      - 'Vaultwarden deployed successfully'
+      - 'URL: https://safe.zlor.fi'
+      - 'Admin panel: https://safe.zlor.fi/admin'
+      - 'Admin panel is restricted by IP allowlist (vault-admin-ip-whitelist middleware)'

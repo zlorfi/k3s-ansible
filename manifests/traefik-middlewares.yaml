@@ -1,0 +1,115 @@
+# Traefik Middleware CRDs
+# Kubernetes equivalent of the Traefik file-provider dynamic middleware config.
+# Each middleware is a separate traefik.io/v1alpha1 Middleware object.
+# Reference in IngressRoute: middlewares: [{ name: <name>, namespace: traefik-system }]
+# Docs: https://doc.traefik.io/traefik/middlewares/overview/
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traefik-system
+
+# ── Security Headers ──────────────────────────────────────────────────────────
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: security-headers
+  namespace: traefik-system
+spec:
+  headers:
+    frameDeny: true
+    contentTypeNosniff: true
+    browserXssFilter: true
+    forceSTSHeader: true
+    stsIncludeSubdomains: true
+    stsPreload: true
+    stsSeconds: 31536000
+    customFrameOptionsValue: "SAMEORIGIN"
+
+# ── Compression ───────────────────────────────────────────────────────────────
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: compression
+  namespace: traefik-system
+spec:
+  compress: {}
+
+# ── Rate Limiting: Web / Chat / WebUI (lenient, allows WebSocket) ─────────────
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit-web
+  namespace: traefik-system
+spec:
+  rateLimit:
+    average: 100
+    burst: 200
+    period: 1s
+    sourceCriterion:
+      ipStrategy:
+        depth: 1
+
+# ── Rate Limiting: Auth endpoints (strict, brute-force protection) ────────────
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: rate-limit-auth
+  namespace: traefik-system
+spec:
+  rateLimit:
+    average: 3
+    burst: 6
+    period: 1s
+    sourceCriterion:
+      ipStrategy:
+        depth: 1
+
+# ── IP Allow List: Dashboard ──────────────────────────────────────────────────
+# NOTE: Traefik only evaluates one ipAllowList middleware per route.
+# Do not chain multiple ipAllowList middlewares on the same IngressRoute.
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: dashboard-allow-list
+  namespace: traefik-system
+spec:
+  ipAllowList:
+    sourceRange:
+      - "127.0.0.1"        # localhost
+      - "192.168.1.9"      # MikroTik router
+      - "192.168.10.0/24"  # Home network
+
+# ── IP Allow List: Local network ──────────────────────────────────────────────
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: local-ip-allow-list
+  namespace: traefik-system
+spec:
+  ipAllowList:
+    sourceRange:
+      - "192.168.1.9"
+      - "192.168.3.1/28"
+      - "192.168.10.0/24"
+
+# ── IP Allow List: Local + IoT network ───────────────────────────────────────
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: local-iot-ip-allow-list
+  namespace: traefik-system
+spec:
+  ipAllowList:
+    sourceRange:
+      - "192.168.1.9"
+      - "192.168.3.1/28"
+      - "192.168.10.0/24"
+      - "192.168.20.0/24"

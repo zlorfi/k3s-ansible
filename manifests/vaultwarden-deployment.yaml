@@ -1,0 +1,177 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vaultwarden
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vaultwarden-data
+  namespace: vaultwarden
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vaultwarden
+  namespace: vaultwarden
+  labels:
+    app: vaultwarden
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vaultwarden
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: vaultwarden
+    spec:
+      containers:
+        - name: vaultwarden
+          image: vaultwarden/server:latest
+          ports:
+            - containerPort: 80
+              name: http
+          env:
+            - name: DOMAIN
+              value: "https://safe.zlor.fi"
+            - name: SIGNUPS_ALLOWED
+              value: "false"
+            - name: EMERGENCY_ACCESS_ALLOWED
+              value: "true"
+            - name: EXTENDED_LOGGING
+              value: "true"
+            - name: HTTPS_ONLY
+              value: "true"
+            - name: WEB_VAULT_ENABLED
+              value: "true"
+            - name: LOG_FILE
+              value: "/data/vaultwarden.log"
+            - name: ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: vaultwarden-secret
+                  key: ADMIN_TOKEN
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            periodSeconds: 15
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: vaultwarden-data
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vaultwarden
+  namespace: vaultwarden
+  labels:
+    app: vaultwarden
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 80
+      protocol: TCP
+      name: http
+  selector:
+    app: vaultwarden
+
+---
+# Middleware: restrict /admin to specific IP ranges
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: vault-admin-ip-whitelist
+  namespace: vaultwarden
+spec:
+  ipAllowList:
+    sourceRange:
+      - "62.143.153.106"
+      - "192.168.10.64"
+
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: vaultwarden
+  namespace: vaultwarden
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`safe.zlor.fi`) && PathPrefix(`/`)
+      kind: Rule
+      priority: 100
+      middlewares:
+        - name: security-headers
+          namespace: traefik-system
+        - name: compression
+          namespace: traefik-system
+        - name: rate-limit-web
+          namespace: traefik-system
+      services:
+        - name: vaultwarden
+          port: 80
+  tls:
+    certResolver: letsencrypt-cloudflare
+
+---
+# Separate IngressRoute for /admin with IP allowlist middleware
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: vaultwarden-admin
+  namespace: vaultwarden
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`safe.zlor.fi`) && PathPrefix(`/admin`)
+      kind: Rule
+      priority: 200
+      middlewares:
+        - name: vault-admin-ip-whitelist
+        - name: security-headers
+          namespace: traefik-system
+        - name: compression
+          namespace: traefik-system
+        - name: rate-limit-web
+          namespace: traefik-system
+      services:
+        - name: vaultwarden
+          port: 80
+  tls:
+    certResolver: letsencrypt-cloudflare

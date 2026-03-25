@@ -49,6 +49,26 @@
     - compute-blade-agent
     - blade-agent
 
+- name: Configure Traefik (ACME / Let's Encrypt via Cloudflare DNS-01)
+  hosts: "{{ groups['master'][0] }}"
+  gather_facts: false
+  become: false
+  roles:
+    - role: traefik-config
+  tags:
+    - traefik-config
+    - traefik
+    - certs
+
+- name: Deploy Vaultwarden
+  hosts: "{{ groups['master'][0] }}"
+  gather_facts: false
+  become: false
+  roles:
+    - role: vaultwarden
+  tags:
+    - vaultwarden
+
 - name: Install Prometheus Operator
   hosts: "{{ groups['master'][0] }}"
   gather_facts: false

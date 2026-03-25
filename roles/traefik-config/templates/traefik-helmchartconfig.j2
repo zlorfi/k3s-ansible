@@ -1,0 +1,63 @@
+# Managed by Ansible — do not edit manually.
+# This HelmChartConfig patches the K3s-bundled Traefik Helm release.
+# K3s's helm-controller merges the valuesContent below into the Traefik chart values.
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    # ── Entrypoints ────────────────────────────────────────────────────────────
+    ports:
+      web:
+        port: 8000
+        exposedPort: 80
+        protocol: TCP
+{% if traefik_redirect_http_to_https %}
+        redirectTo:
+          port: {{ traefik_entrypoint_websecure }}
+{% endif %}
+      websecure:
+        port: 8443
+        exposedPort: 443
+        protocol: TCP
+        tls:
+          enabled: true
+
+    # ── ACME / Let's Encrypt via Cloudflare DNS-01 ─────────────────────────────
+    additionalArguments:
+      - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.email={{ acme_email }}"
+      - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.storage={{ traefik_acme_storage }}"
+      - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.caserver={{ traefik_acme_server }}"
+      - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.dnschallenge=true"
+      - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.dnschallenge.provider=cloudflare"
+      - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53"
+
+    # ── Cloudflare API token injected as an environment variable ───────────────
+    env:
+      - name: CF_DNS_API_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: traefik-cloudflare-token
+            key: CF_DNS_API_TOKEN
+
+    # ── Persist ACME certificate state across pod restarts ────────────────────
+    persistence:
+      enabled: true
+      name: data
+      accessMode: ReadWriteOnce
+      size: 128Mi
+      path: /data
+
+    # ── Allow cross-namespace middleware references ───────────────────────────
+    # Required for IngressRoute objects in one namespace (e.g. vaultwarden) to
+    # reference Middleware objects in another namespace (e.g. traefik-system).
+    providers:
+      kubernetesCRD:
+        allowCrossNamespace: true
+
+    # ── Expose Traefik dashboard (internal use only) ───────────────────────────
+    ingressRoute:
+      dashboard:
+        enabled: false

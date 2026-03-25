@@ -6,7 +6,7 @@
 
 - **🔄 3-node HA control plane** with automatic failover
 - **📊 Comprehensive monitoring** (Telegraf → InfluxDB → Grafana)
-- **🌐 Traefik ingress** with SSL support
+- **🌐 Traefik ingress** with automatic TLS via Let's Encrypt + Cloudflare DNS-01
 - **🖥️ Compute Blade Agent** for hardware monitoring
 - **📈 Prometheus metrics** with custom dashboards
 - **🔧 One-command deployment** and maintenance
@@ -36,7 +36,9 @@ k3s-ansible/
 │   ├── 📁 k3s-deploy-test/          # Test deployment
 │   ├── 📁 compute-blade-agent/      # Hardware monitoring
 │   ├── 📁 prometheus-operator/      # Monitoring stack
-│   └── 📁 telegraf/                 # Metrics collection
+│   ├── 📁 telegraf/                 # Metrics collection
+│   ├── 📁 traefik-config/           # Traefik ACME/TLS configuration
+│   └── 📁 vaultwarden/              # Vaultwarden password manager
 ├── 📁 grafana/                       # Grafana dashboards
 ├── 📁 influxdb/                      # InfluxDB dashboards
 └── 📄 telegraf.yml                  # Metrics deployment
@@ -74,13 +76,23 @@ Create a `.env` file in the repository root with your credentials:
 
 ```bash
 cat > .env << EOF
+# InfluxDB / Telegraf metrics
 INFLUXDB_HOST=192.168.10.10
 INFLUXDB_PORT=8086
 INFLUXDB_ORG=family
 INFLUXDB_BUCKET=rpi-cluster
-INFLUXDB_TOKEN=your-api-token-here
+INFLUXDB_TOKEN=your-influxdb-api-token-here
+
+# Traefik ACME / Let's Encrypt via Cloudflare DNS-01
+ACME_EMAIL=you@yourdomain.com
+CF_DNS_API_TOKEN=your-cloudflare-api-token-here
+
+# Vaultwarden
+ADMIN_TOKEN=your-vaultwarden-admin-token-here
 EOF
 ```
+
+**Cloudflare API Token requirements**: The token must have **Zone → DNS → Edit** permission scoped to the DNS zones you want to issue certificates for. Create one at Cloudflare dashboard → My Profile → API Tokens → Create Token → Edit zone DNS (template).
 
 **⚠️ Security Note:** This file is ignored by Git (`.gitignore`) and should never be committed. Keep actual tokens secure and only on your local machine.
 
@@ -106,6 +118,12 @@ ansible-playbook site.yml --tags prereq
 
 # Deploy monitoring
 ansible-playbook telegraf.yml
+
+# Configure Traefik ACME/TLS only (on already-running cluster)
+ansible-playbook site.yml --tags traefik-config
+
+# Deploy Vaultwarden only
+ansible-playbook site.yml --tags vaultwarden
 
 # Deploy test application only
 ansible-playbook site.yml --tags deploy-test
@@ -227,20 +245,64 @@ kubectl get nodes
 ## 🌐 Ingress & Networking
 
 ### Traefik Ingress Controller
-**✅ Pre-installed** and ready to use!
+**✅ Pre-installed** by K3s and configured for automatic TLS.
 
 **How it works:**
-- 🎯 Listens on ports 80 (HTTP) & 443 (HTTPS)
-- 🔄 Routes traffic by hostname
-- 📦 Multiple apps share same IP via different domains
-- ⚡ Zero additional configuration needed
+- Listens on port 80 (HTTP) and 443 (HTTPS)
+- Routes traffic by hostname to the correct service
+- Multiple apps share the same IP via different domains
+- HTTP traffic is automatically redirected to HTTPS
 
 **Verify Traefik:**
 ```bash
 kubectl get pods -n kube-system -l app.kubernetes.io/name=traefik
 kubectl get svc -n kube-system traefik
-kubectl get ingress
+kubectl get ingress --all-namespaces
 ```
+
+### TLS Certificates — Let's Encrypt via Cloudflare DNS-01
+
+Certificates are issued automatically by **Traefik's built-in ACME client** using a **DNS-01 challenge** through the Cloudflare API. No cert-manager is required.
+
+**How it works:**
+1. When an Ingress with `certresolver: letsencrypt-cloudflare` is deployed, Traefik requests a certificate from Let's Encrypt.
+2. Traefik creates a `_acme-challenge.<domain>` TXT record via the Cloudflare API to prove domain ownership.
+3. Let's Encrypt validates the record and issues the certificate.
+4. Traefik stores the certificate in `/data/acme.json` (on a PVC) and auto-renews it before expiry.
+
+**The `traefik-config` role** (`roles/traefik-config/`) provisions this by:
+- Creating a `traefik-cloudflare-token` Kubernetes Secret in `kube-system` from `.env`
+- Applying a `HelmChartConfig` CRD that patches the K3s-bundled Traefik Helm release with the ACME resolver and Cloudflare provider configuration
+
+**Deploy or re-apply the configuration:**
+```bash
+ansible-playbook site.yml --tags traefik-config
+```
+
+**Annotate an Ingress to use automatic TLS:**
+```yaml
+annotations:
+  traefik.ingress.kubernetes.io/router.entrypoints: websecure
+  traefik.ingress.kubernetes.io/router.tls: "true"
+  traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt-cloudflare
+```
+
+**Check certificate status:**
+```bash
+# View ACME storage (cert state)
+kubectl exec -n kube-system deploy/traefik -- cat /data/acme.json | jq '.["letsencrypt-cloudflare"].Certificates[].domain'
+
+# Check Traefik logs for ACME activity
+kubectl logs -n kube-system deploy/traefik | grep -i acme
+```
+
+**Switch to Let's Encrypt staging** (to avoid rate limits during testing):
+
+Edit `roles/traefik-config/defaults/main.yml`:
+```yaml
+traefik_acme_server: https://acme-staging-v02.api.letsencrypt.org/directory
+```
+Then re-run `ansible-playbook site.yml --tags traefik-config`.
 
 ## 🧪 Test Your Cluster
 
@@ -442,6 +504,32 @@ sudo journalctl -u k3s-agent -f
 
 # Reset agent
 /usr/local/bin/k3s-agent-uninstall.sh
+```
+
+### TLS / Certificate Issues
+
+**Certificate not issued (stays at self-signed):**
+```bash
+# Check Traefik logs for ACME errors
+kubectl logs -n kube-system deploy/traefik | grep -iE "acme|error|cloudflare"
+
+# Verify the Cloudflare secret exists
+kubectl get secret traefik-cloudflare-token -n kube-system
+
+# Verify the HelmChartConfig was applied
+kubectl get helmchartconfig traefik -n kube-system
+```
+
+**Cloudflare API token errors:**
+- Confirm the token has **Zone → DNS → Edit** permission for the relevant zone.
+- Confirm the token is correctly set in `.env` (no trailing whitespace or newlines).
+- Re-run `ansible-playbook site.yml --tags traefik-config` after correcting the token.
+
+**Let's Encrypt rate limit hit:**
+- Switch to the staging server in `roles/traefik-config/defaults/main.yml` (`traefik_acme_server`), re-run the role, verify the flow works, then switch back to production and delete `acme.json` to force re-issuance:
+```bash
+kubectl exec -n kube-system deploy/traefik -- rm /data/acme.json
+kubectl rollout restart deploy/traefik -n kube-system
 ```
 
 ### Common Issues
