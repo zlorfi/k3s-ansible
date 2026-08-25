@@ -146,7 +146,7 @@ spec:
         - name: vaultwarden
           port: 80
   tls:
-    certResolver: letsencrypt-cloudflare
+    certResolver: letsencrypt-hetzner
 
 ---
 # Separate IngressRoute for /admin with IP allowlist middleware
@@ -174,4 +174,4 @@ spec:
         - name: vaultwarden
           port: 80
   tls:
-    certResolver: letsencrypt-cloudflare
+    certResolver: letsencrypt-hetzner

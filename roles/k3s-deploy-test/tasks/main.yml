@@ -66,7 +66,7 @@
 
 - name: Wait for nginx deployment to be ready
   shell: |
-    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig wait --for=condition=available --timeout=300s deployment/nginx-test -n default
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig wait --for=condition=available --timeout=300s deployment/{{ nginx_test_name }} -n {{ nginx_test_namespace }}
   register: deployment_ready
   delegate_to: localhost
   run_once: true
@@ -74,7 +74,7 @@
 
 - name: Get deployment status
   shell: |
-    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get deployment nginx-test -n default -o wide
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get deployment {{ nginx_test_name }} -n {{ nginx_test_namespace }} -o wide
   register: deployment_status
   delegate_to: localhost
   run_once: true
@@ -82,7 +82,7 @@
 
 - name: Get pods status
   shell: |
-    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get pods -l app=nginx-test -n default -o wide
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get pods -l app={{ nginx_test_name }} -n {{ nginx_test_namespace }} -o wide
   register: pods_status
   delegate_to: localhost
   run_once: true
@@ -90,15 +90,15 @@
 
 - name: Get service details
   shell: |
-    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get service nginx-test -n default
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get service {{ nginx_test_name }} -n {{ nginx_test_namespace }}
   register: service_status
   delegate_to: localhost
   run_once: true
   changed_when: false
 
-- name: Get ingress details
+- name: Get IngressRoute details
   shell: |
-    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get ingress nginx-test -n default
+    {{ kubectl_bin }} --kubeconfig={{ playbook_dir }}/kubeconfig get ingressroute {{ nginx_test_name }} -n {{ nginx_test_namespace }}
   register: ingress_status
   delegate_to: localhost
   run_once: true
@@ -127,41 +127,40 @@
       🌐 SERVICE:
       {{ service_status.stdout }}
 
-      🔀 INGRESS:
+      🔀 INGRESSROUTE:
       {{ ingress_status.stdout }}
 
       ========================================================================
       🚀 HOW TO ACCESS YOUR APPLICATION
       ========================================================================
 
-      STEP 1: Add to your /etc/hosts file
+      In your browser (DNS must point {{ nginx_test_host }} at the cluster VIP):
       ───────────────────────────────────────────────────────────────────────
-      {{ master_ip }}  nginx-test.local nginx.pi.local
+      → https://{{ nginx_test_host }}
 
-      STEP 2: Access in your browser
+      Or test with curl:
       ───────────────────────────────────────────────────────────────────────
-      → http://nginx-test.local
-      → http://nginx.pi.local
+      curl https://{{ nginx_test_host }}
 
-      STEP 3: Or test with curl
+      Bypass DNS and hit a node directly:
       ───────────────────────────────────────────────────────────────────────
-      curl -H "Host: nginx-test.local" http://{{ master_ip }}
+      curl --resolve {{ nginx_test_host }}:443:{{ master_ip }} https://{{ nginx_test_host }}
 
       ========================================================================
       📝 USEFUL COMMANDS
       ========================================================================
 
       Scale deployment:
-        kubectl --kubeconfig={{ playbook_dir }}/kubeconfig scale deployment nginx-test --replicas=10
+        kubectl --kubeconfig={{ playbook_dir }}/kubeconfig scale deployment {{ nginx_test_name }} -n {{ nginx_test_namespace }} --replicas=10
 
       Delete deployment:
         kubectl --kubeconfig={{ playbook_dir }}/kubeconfig delete -f {{ playbook_dir }}/manifests/nginx-test-deployment.yaml
 
       View logs:
-        kubectl --kubeconfig={{ playbook_dir }}/kubeconfig logs -l app=nginx-test --tail=50
+        kubectl --kubeconfig={{ playbook_dir }}/kubeconfig logs -l app={{ nginx_test_name }} -n {{ nginx_test_namespace }} --tail=50
 
       Watch pods:
-        kubectl --kubeconfig={{ playbook_dir }}/kubeconfig get pods -l app=nginx-test -w
+        kubectl --kubeconfig={{ playbook_dir }}/kubeconfig get pods -l app={{ nginx_test_name }} -n {{ nginx_test_namespace }} -w
 
       ========================================================================
 

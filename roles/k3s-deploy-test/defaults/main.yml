@@ -1,0 +1,7 @@
+---
+# Namespace and object names must match manifests/nginx-test-deployment.yaml.
+nginx_test_namespace: nginx-test
+nginx_test_name: nginx-test
+
+# Public hostname served by the IngressRoute (TLS via the Traefik ACME resolver).
+nginx_test_host: test.zlor.fi

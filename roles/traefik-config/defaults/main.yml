@@ -1,10 +1,10 @@
 ---
-# Traefik ACME / Let's Encrypt configuration via Cloudflare DNS-01 challenge
-# Secrets (acme_email, cloudflare_api_token) are read from .env at runtime.
+# Traefik ACME / Let's Encrypt configuration via Hetzner DNS-01 challenge
+# Secrets (acme_email, hetzner_api_token) are read from .env at runtime.
 
 # Name of the ACME certificate resolver — must match the certresolver annotation
 # used in Ingress/IngressRoute objects (e.g. vaultwarden-deployment.yaml).
-traefik_certresolver_name: letsencrypt-cloudflare
+traefik_certresolver_name: letsencrypt-hetzner
 
 # Let's Encrypt ACME server.
 # Use the staging URL while testing to avoid rate-limit hits:
@@ -14,9 +14,29 @@ traefik_acme_server: https://acme-v02.api.letsencrypt.org/directory
 # Path inside the Traefik pod where ACME state (certs, account) is persisted.
 traefik_acme_storage: /data/acme.json
 
+# lego DNS-01 provider code (https://go-acme.github.io/lego/dns/hetzner/).
+traefik_dns_provider: hetzner
+
+# Recursive resolvers used to verify TXT record propagation before asking
+# Let's Encrypt to validate. Hetzner's authoritative NS are ns1/ns2.hetzner.de.
+traefik_dns_resolvers: '1.1.1.1:53,8.8.8.8:53'
+
+# Hetzner DNS API tuning. The lego defaults (60s propagation timeout) are often
+# too tight for Hetzner, which can take a few minutes to propagate TXT records.
+hetzner_propagation_timeout: 300 # seconds
+hetzner_polling_interval: 5 # seconds between propagation checks
+hetzner_ttl: 120 # TTL of the _acme-challenge TXT record
+hetzner_http_timeout: 30 # API request timeout
+
+# Name of the Kubernetes Secret holding the Hetzner DNS API token.
+traefik_dns_secret_name: traefik-hetzner-token
+
+# Legacy secret from the previous Cloudflare setup — removed during the run.
+traefik_dns_legacy_secret_name: traefik-cloudflare-token
+
 # Traefik entrypoint names — must match annotations in ingress manifests.
-traefik_entrypoint_web: web           # HTTP  (port 80)
-traefik_entrypoint_websecure: websecure  # HTTPS (port 443)
+traefik_entrypoint_web: web # HTTP  (port 80)
+traefik_entrypoint_websecure: websecure # HTTPS (port 443)
 
 # Redirect all HTTP traffic to HTTPS.
 traefik_redirect_http_to_https: true

@@ -6,24 +6,47 @@
   delegate_to: localhost
   become: false
 
-- name: Set Cloudflare and ACME variables from .env
+- name: Set Hetzner and ACME variables from .env
   set_fact:
-    cloudflare_api_token: "{{ (env_file.content | b64decode | regex_search('CF_DNS_API_TOKEN=(.+)$', '\\1', multiline=True) | first) }}"
+    hetzner_api_token: "{{ (env_file.content | b64decode | regex_search('HETZNER_API_TOKEN=(.+)$', '\\1', multiline=True) | first) }}"
     acme_email: "{{ (env_file.content | b64decode | regex_search('ACME_EMAIL=(.+)$', '\\1', multiline=True) | first) }}"
   no_log: true
 
-- name: Create traefik-cloudflare-token secret
+- name: Fail when HETZNER_API_TOKEN or ACME_EMAIL is missing from .env
+  assert:
+    that:
+      - hetzner_api_token | default('', true) | trim | length > 0
+      - acme_email | default('', true) | trim | length > 0
+    fail_msg: >-
+      .env must define both HETZNER_API_TOKEN and ACME_EMAIL.
+      Create a Hetzner DNS API token at https://dns.hetzner.com/settings/api-token
+  delegate_to: localhost
+  become: false
+
+- name: Create {{ traefik_dns_secret_name }} secret
   shell: |
-    kubectl create secret generic traefik-cloudflare-token \
-      --from-literal=CF_DNS_API_TOKEN={{ cloudflare_api_token }} \
+    kubectl create secret generic {{ traefik_dns_secret_name }} \
+      --from-literal=HETZNER_API_TOKEN="$HETZNER_API_TOKEN" \
       --namespace kube-system \
       --dry-run=client -o yaml \
       --kubeconfig={{ playbook_dir }}/kubeconfig \
     | kubectl apply -f - --kubeconfig={{ playbook_dir }}/kubeconfig
+  environment:
+    HETZNER_API_TOKEN: '{{ hetzner_api_token }}'
   no_log: true
   delegate_to: localhost
   become: false
   changed_when: true
+
+- name: Remove legacy Cloudflare token secret
+  shell: |
+    kubectl delete secret {{ traefik_dns_legacy_secret_name }} \
+      --namespace kube-system --ignore-not-found \
+      --kubeconfig={{ playbook_dir }}/kubeconfig
+  register: legacy_secret_result
+  delegate_to: localhost
+  become: false
+  changed_when: "'deleted' in legacy_secret_result.stdout"
 
 - name: Template Traefik HelmChartConfig
   template:
@@ -61,7 +84,9 @@
       - 'Certificate resolver: {{ traefik_certresolver_name }}'
       - 'ACME server: {{ traefik_acme_server }}'
       - 'ACME storage: {{ traefik_acme_storage }}'
-      - 'DNS challenge provider: cloudflare'
+      - 'DNS challenge provider: {{ traefik_dns_provider }}'
+      - 'DNS API token secret: {{ traefik_dns_secret_name }} (kube-system)'
+      - 'DNS propagation timeout: {{ hetzner_propagation_timeout }}s'
       - 'HTTP->HTTPS redirect: {{ traefik_redirect_http_to_https }}'
       - ''
       - 'Ingress objects using this resolver must set:'

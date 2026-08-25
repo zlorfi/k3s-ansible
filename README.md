@@ -6,7 +6,7 @@
 
 - **🔄 3-node HA control plane** with automatic failover
 - **📊 Comprehensive monitoring** (Telegraf → InfluxDB → Grafana)
-- **🌐 Traefik ingress** with automatic TLS via Let's Encrypt + Cloudflare DNS-01
+- **🌐 Traefik ingress** with automatic TLS via Let's Encrypt + Hetzner DNS-01
 - **🖥️ Compute Blade Agent** for hardware monitoring
 - **📈 Prometheus metrics** with custom dashboards
 - **🔧 One-command deployment** and maintenance
@@ -83,16 +83,18 @@ INFLUXDB_ORG=family
 INFLUXDB_BUCKET=rpi-cluster
 INFLUXDB_TOKEN=your-influxdb-api-token-here
 
-# Traefik ACME / Let's Encrypt via Cloudflare DNS-01
+# Traefik ACME / Let's Encrypt via Hetzner DNS-01
 ACME_EMAIL=you@yourdomain.com
-CF_DNS_API_TOKEN=your-cloudflare-api-token-here
+HETZNER_API_TOKEN=your-hetzner-dns-api-token-here
 
 # Vaultwarden
 ADMIN_TOKEN=your-vaultwarden-admin-token-here
 EOF
 ```
 
-**Cloudflare API Token requirements**: The token must have **Zone → DNS → Edit** permission scoped to the DNS zones you want to issue certificates for. Create one at Cloudflare dashboard → My Profile → API Tokens → Create Token → Edit zone DNS (template).
+**Hetzner DNS API Token requirements**: Create a token in the [Hetzner DNS Console](https://dns.hetzner.com/settings/api-token) → **API tokens** → **Create access token**. The token grants read/write access to all DNS zones in that Hetzner DNS account, so use an account that manages the zones you issue certificates for (`zlor.fi`).
+
+> Note: this is a **Hetzner DNS Console** token (`dns.hetzner.com`), *not* a Hetzner Cloud API token from `console.hetzner.cloud`. They are not interchangeable.
 
 **⚠️ Security Note:** This file is ignored by Git (`.gitignore`) and should never be committed. Keep actual tokens secure and only on your local machine.
 
@@ -260,19 +262,24 @@ kubectl get svc -n kube-system traefik
 kubectl get ingress --all-namespaces
 ```
 
-### TLS Certificates — Let's Encrypt via Cloudflare DNS-01
+### TLS Certificates — Let's Encrypt via Hetzner DNS-01
 
-Certificates are issued automatically by **Traefik's built-in ACME client** using a **DNS-01 challenge** through the Cloudflare API. No cert-manager is required.
+Certificates are issued automatically by **Traefik's built-in ACME client** using a **DNS-01 challenge** through the Hetzner DNS API. No cert-manager is required.
 
 **How it works:**
-1. When an Ingress with `certresolver: letsencrypt-cloudflare` is deployed, Traefik requests a certificate from Let's Encrypt.
-2. Traefik creates a `_acme-challenge.<domain>` TXT record via the Cloudflare API to prove domain ownership.
+1. When an Ingress with `certresolver: letsencrypt-hetzner` is deployed, Traefik requests a certificate from Let's Encrypt.
+2. Traefik creates a `_acme-challenge.<domain>` TXT record via the Hetzner DNS API to prove domain ownership.
 3. Let's Encrypt validates the record and issues the certificate.
 4. Traefik stores the certificate in `/data/acme.json` (on a PVC) and auto-renews it before expiry.
 
 **The `traefik-config` role** (`roles/traefik-config/`) provisions this by:
-- Creating a `traefik-cloudflare-token` Kubernetes Secret in `kube-system` from `.env`
-- Applying a `HelmChartConfig` CRD that patches the K3s-bundled Traefik Helm release with the ACME resolver and Cloudflare provider configuration
+- Creating a `traefik-hetzner-token` Kubernetes Secret in `kube-system` from `.env`
+- Deleting the legacy `traefik-cloudflare-token` secret if it still exists
+- Applying a `HelmChartConfig` CRD that patches the K3s-bundled Traefik Helm release with the ACME resolver and Hetzner provider configuration
+
+Hetzner's DNS propagation is slower than Cloudflare's, so the role sets
+`HETZNER_PROPAGATION_TIMEOUT=300`, `HETZNER_POLLING_INTERVAL=5` and `HETZNER_TTL=120`
+(tunable in `roles/traefik-config/defaults/main.yml`).
 
 **Deploy or re-apply the configuration:**
 ```bash
@@ -284,13 +291,13 @@ ansible-playbook site.yml --tags traefik-config
 annotations:
   traefik.ingress.kubernetes.io/router.entrypoints: websecure
   traefik.ingress.kubernetes.io/router.tls: "true"
-  traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt-cloudflare
+  traefik.ingress.kubernetes.io/router.tls.certresolver: letsencrypt-hetzner
 ```
 
 **Check certificate status:**
 ```bash
 # View ACME storage (cert state)
-kubectl exec -n kube-system deploy/traefik -- cat /data/acme.json | jq '.["letsencrypt-cloudflare"].Certificates[].domain'
+kubectl exec -n kube-system deploy/traefik -- cat /data/acme.json | jq '.["letsencrypt-hetzner"].Certificates[].domain'
 
 # Check Traefik logs for ACME activity
 kubectl logs -n kube-system deploy/traefik | grep -i acme
@@ -511,19 +518,24 @@ sudo journalctl -u k3s-agent -f
 **Certificate not issued (stays at self-signed):**
 ```bash
 # Check Traefik logs for ACME errors
-kubectl logs -n kube-system deploy/traefik | grep -iE "acme|error|cloudflare"
+kubectl logs -n kube-system deploy/traefik | grep -iE "acme|error|hetzner"
 
-# Verify the Cloudflare secret exists
-kubectl get secret traefik-cloudflare-token -n kube-system
+# Verify the Hetzner secret exists
+kubectl get secret traefik-hetzner-token -n kube-system
 
 # Verify the HelmChartConfig was applied
 kubectl get helmchartconfig traefik -n kube-system
 ```
 
-**Cloudflare API token errors:**
-- Confirm the token has **Zone → DNS → Edit** permission for the relevant zone.
+**Hetzner DNS API token errors:**
+- Confirm the token was created in the **Hetzner DNS Console** (`dns.hetzner.com`), not Hetzner Cloud.
+- Confirm the Hetzner DNS account actually holds the zone (`zlor.fi`) and that the domain's nameservers point at `ns1.first-ns.de` / `robotns2.second-ns.de` / `robotns3.second-ns.com` (or the NS set shown in the Hetzner zone).
 - Confirm the token is correctly set in `.env` (no trailing whitespace or newlines).
 - Re-run `ansible-playbook site.yml --tags traefik-config` after correcting the token.
+
+**DNS-01 challenge times out:**
+- Raise `hetzner_propagation_timeout` in `roles/traefik-config/defaults/main.yml` and re-run the role.
+- Verify propagation manually: `dig +short TXT _acme-challenge.safe.zlor.fi @ns1.first-ns.de`
 
 **Let's Encrypt rate limit hit:**
 - Switch to the staging server in `roles/traefik-config/defaults/main.yml` (`traefik_acme_server`), re-run the role, verify the flow works, then switch back to production and delete `acme.json` to force re-issuance:

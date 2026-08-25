@@ -249,4 +249,4 @@ spec:
         - name: nginx-test
           port: 80
   tls:
-    certResolver: letsencrypt-cloudflare
+    certResolver: letsencrypt-hetzner

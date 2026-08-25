@@ -25,22 +25,30 @@ spec:
         tls:
           enabled: true
 
-    # ── ACME / Let's Encrypt via Cloudflare DNS-01 ─────────────────────────────
+    # ── ACME / Let's Encrypt via Hetzner DNS-01 ────────────────────────────────
     additionalArguments:
       - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.email={{ acme_email }}"
       - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.storage={{ traefik_acme_storage }}"
       - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.caserver={{ traefik_acme_server }}"
       - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.dnschallenge=true"
-      - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.dnschallenge.provider=cloudflare"
-      - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.dnschallenge.resolvers=1.1.1.1:53,8.8.8.8:53"
+      - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.dnschallenge.provider={{ traefik_dns_provider }}"
+      - "--certificatesresolvers.{{ traefik_certresolver_name }}.acme.dnschallenge.resolvers={{ traefik_dns_resolvers }}"
 
-    # ── Cloudflare API token injected as an environment variable ───────────────
+    # ── Hetzner DNS API token + provider tuning (lego env vars) ────────────────
     env:
-      - name: CF_DNS_API_TOKEN
+      - name: HETZNER_API_TOKEN
         valueFrom:
           secretKeyRef:
-            name: traefik-cloudflare-token
-            key: CF_DNS_API_TOKEN
+            name: {{ traefik_dns_secret_name }}
+            key: HETZNER_API_TOKEN
+      - name: HETZNER_PROPAGATION_TIMEOUT
+        value: "{{ hetzner_propagation_timeout }}"
+      - name: HETZNER_POLLING_INTERVAL
+        value: "{{ hetzner_polling_interval }}"
+      - name: HETZNER_TTL
+        value: "{{ hetzner_ttl }}"
+      - name: HETZNER_HTTP_TIMEOUT
+        value: "{{ hetzner_http_timeout }}"
 
     # ── Persist ACME certificate state across pod restarts ────────────────────
     persistence:
