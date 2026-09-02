@@ -89,6 +89,9 @@ HETZNER_API_TOKEN=your-hetzner-dns-api-token-here
 
 # Vaultwarden
 ADMIN_TOKEN=your-vaultwarden-admin-token-here
+
+# Grafana (optional — falls back to 'admin' if unset)
+GRAFANA_ADMIN_PASSWORD=your-grafana-admin-password-here
 EOF
 ```
 

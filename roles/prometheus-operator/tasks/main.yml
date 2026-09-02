@@ -6,6 +6,20 @@
 
 - name: Block for Prometheus Operator installation
   block:
+    - name: Read .env file
+      slurp:
+        src: '{{ playbook_dir }}/.env'
+      register: env_file
+      delegate_to: localhost
+      become: false
+
+    - name: Set Grafana admin password from .env if provided
+      set_fact:
+        grafana_admin_password: "{{ (env_file.content | b64decode | regex_findall('GRAFANA_ADMIN_PASSWORD=(.+)$', multiline=True) | flatten | first) | default(omit, true) }}"
+      no_log: true
+      delegate_to: localhost
+      become: false
+
     - name: Check if Helm is installed locally
       shell: which helm
       register: helm_check
@@ -65,6 +79,7 @@
       register: helm_install_result
       delegate_to: localhost
       become: false
+      no_log: true
       changed_when: "'has been upgraded' in helm_install_result.stdout or 'has been installed' in helm_install_result.stdout"
 
     - name: Wait for Prometheus Operator to be ready
@@ -144,7 +159,7 @@
           - 'Prometheus: Available at prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090'
           - 'Grafana: Available at prometheus-grafana.monitoring.svc.cluster.local:80'
           - 'AlertManager: Available at prometheus-kube-alertmanager.monitoring.svc.cluster.local:9093'
-          - "Default Grafana admin password: {{ grafana_admin_password | default('admin') }}"
+          - 'Grafana admin password: taken from GRAFANA_ADMIN_PASSWORD in .env (falls back to admin)'
           - ''
           - 'To access Prometheus UI:'
           - '  kubectl port-forward -n monitoring svc/prometheus-kube-prometheus-prometheus 9090:9090'

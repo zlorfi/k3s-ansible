@@ -48,9 +48,11 @@
           register: worker_uninstall
 
     - name: Kill any remaining K3s processes
+      # -x matches exact process names only; a plain `pkill -f k3s` would match
+      # the shell running this very command and kill its own parent process.
       shell: |
-        pkill -f "k3s"
-        pkill -f "containerd"
+        pkill -x k3s || true
+        pkill -x containerd || true
       ignore_errors: yes
 
     - name: Remove K3s data directories

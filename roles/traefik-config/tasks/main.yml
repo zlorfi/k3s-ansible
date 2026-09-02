@@ -33,7 +33,6 @@
     | kubectl apply -f - --kubeconfig={{ playbook_dir }}/kubeconfig
   environment:
     HETZNER_API_TOKEN: '{{ hetzner_api_token }}'
-  no_log: true
   delegate_to: localhost
   become: false
   changed_when: true
@@ -68,6 +67,13 @@
     state: absent
   delegate_to: localhost
   become: false
+
+- name: Apply Traefik middlewares and default backend
+  shell: kubectl apply -f {{ playbook_dir }}/manifests/traefik-middlewares.yaml -f {{ playbook_dir }}/manifests/default-backend.yaml --kubeconfig={{ playbook_dir }}/kubeconfig
+  register: traefik_resources_result
+  delegate_to: localhost
+  become: false
+  changed_when: "'created' in traefik_resources_result.stdout or 'configured' in traefik_resources_result.stdout"
 
 - name: Wait for Traefik rollout after config change
   shell: kubectl rollout status deployment/traefik -n kube-system --kubeconfig={{ playbook_dir }}/kubeconfig --timeout=120s

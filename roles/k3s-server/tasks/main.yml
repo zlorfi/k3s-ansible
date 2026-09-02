@@ -103,7 +103,7 @@
 - name: Replace localhost with master IP in kubeconfig
   replace:
     path: '/home/{{ ansible_user }}/.kube/config'
-    regexp: '127.0.0.1'
+    regexp: '127\.0\.0\.1'
     replace: '{{ ansible_host }}'
 
 - name: Fetch kubeconfig from primary master only

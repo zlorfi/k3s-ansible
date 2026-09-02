@@ -20,12 +20,13 @@
 - name: Create vaultwarden-secret from .env
   shell: |
     kubectl create secret generic vaultwarden-secret \
-      --from-literal=ADMIN_TOKEN={{ vaultwarden_admin_token }} \
+      --from-literal=ADMIN_TOKEN="$ADMIN_TOKEN" \
       --namespace vaultwarden \
       --dry-run=client -o yaml \
       --kubeconfig={{ playbook_dir }}/kubeconfig \
     | kubectl apply -f - --kubeconfig={{ playbook_dir }}/kubeconfig
-  no_log: true
+  environment:
+    ADMIN_TOKEN: '{{ vaultwarden_admin_token }}'
   delegate_to: localhost
   become: false
   changed_when: true

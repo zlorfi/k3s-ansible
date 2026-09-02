@@ -53,23 +53,30 @@
     line: 'dtoverlay=uart5'
     state: present
 
+# The negative lookahead keeps this idempotent. Without it the regexp matches
+# the rootwait line on every run and appends a duplicate copy of the cgroup
+# parameters, which also makes the reboot handler below fire every time.
 - name: Enable cgroup memory and swap
   lineinfile:
     path: /boot/firmware/cmdline.txt
     backrefs: yes
-    regexp: '^(.*rootwait.*)$'
+    regexp: '^(?!.*cgroup_enable=memory)(.*rootwait.*)$'
     line: '\1 cgroup_enable=cpuset cgroup_memory=1 cgroup_enable=memory'
   register: cmdline
 
-- name: Enable legacy iptables (required for k3s on Raspberry Pi)
+# Raspberry Pi OS kernels 6.18+ no longer ship the legacy x_tables modules
+# (ip_tables.ko / iptable_nat.ko). Forcing the legacy backend there makes
+# kube-proxy fail with "can't initialize iptables table `nat'", which k3s
+# treats as fatal and turns into a permanent service crash-loop.
+- name: Select nft iptables backend
   alternatives:
     name: iptables
-    path: /usr/sbin/iptables-legacy
+    path: /usr/sbin/iptables-nft
 
-- name: Enable legacy ip6tables
+- name: Select nft ip6tables backend
   alternatives:
     name: ip6tables
-    path: /usr/sbin/ip6tables-legacy
+    path: /usr/sbin/ip6tables-nft
 
 - name: Disable swap
   command: swapoff -a
